@@ -53,10 +53,22 @@ waiting for. Per prompt:
 - `judge` — a cheap model reads the transcript and decides.
 - `always` / `never` — skip the question entirely.
 
+**Environment briefing.** A scheduled run starts with no history and nobody to ask, so
+what it needs to know about the platform is stated up front: that it has a cluster to
+inspect, a GitHub token to push and merge with, and that changes reach the cluster
+through git rather than `kubectl`. One piece of standing text in Settings, prepended to
+every run's system prompt. See [Telling a run where it is](#telling-a-run-where-it-is).
+
 **MCP connections.** KubeClaude does **not** run MCP servers. It stores how to reach
 servers that already run elsewhere and writes them into the `.mcp.json` it hands to
 Claude. `${VAR}` placeholders are passed through untouched and expanded from the run's
 environment, so tokens live in Kubernetes secrets, not in this database.
+
+Reach for MCP when a service has no CLI. **GitHub and Kubernetes already have one** —
+`gh` and `kubectl` ship in the image and authenticate from the environment and the pod's
+ServiceAccount. Brokering those same APIs through an MCP server adds a network hop, a
+second auth system, and a component that can be down, for no capability you did not
+already have.
 
 ---
 
@@ -78,11 +90,13 @@ Everything is environment variables; the rest is configured in the UI.
 | `RUN_RETENTION_DAYS` | `30` | Runs older than this are pruned. `0` keeps everything. |
 | `KUBECLAUDE_AUTH_TOKEN` | — | If set, the API and UI require this bearer token. **Set it if the ingress is reachable from the internet** — a KubeClaude with credentials is a Claude that runs commands. |
 | `FORWARD_ENV_PREFIXES` | — | Comma-separated prefixes of pod env vars to forward into runs, e.g. `GITHUB_,GIT_`. Nothing is forwarded by default. |
+| `EXPOSE_KUBERNETES` | `true` | Forward `KUBERNETES_SERVICE_HOST`/`PORT` so `kubectl` can reach the API server as the pod's ServiceAccount. Set `false` to deny cluster access outright. |
 | `CLAUDE_BIN` | `claude` | Path to the CLI. |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error`. |
 
 Runs get a deliberately narrow environment: `PATH`, `HOME`, `TZ`, the Claude
-credentials, the global env from Settings, the prompt's own env, and anything matching
+credentials, the global env from Settings, the prompt's own env, the Kubernetes service
+host and port when `EXPOSE_KUBERNETES` is on, and anything matching
 `FORWARD_ENV_PREFIXES`. Nothing else from the pod leaks in.
 
 ### Kubernetes
@@ -115,8 +129,9 @@ docker run -p 8080:8080 -v kubeclaude-data:/data \
   -e CLAUDE_CODE_OAUTH_TOKEN=… kubeclaude
 ```
 
-The image ships `git`, `gh`, `ripgrep` and `jq` alongside the Claude CLI, so a prompt
-can clone a repo, push a branch and merge a pull request without extra setup.
+The image ships `git`, `gh`, `kubectl`, `ripgrep` and `jq` alongside the Claude CLI, so a
+prompt can clone a repo, push a branch, merge a pull request, and then check what the
+cluster made of it.
 
 ---
 
@@ -136,6 +151,37 @@ without any one of them:
 3. **Enough room.** Raise the timeout for long jobs. Leave auto-resume on so a quota
    stop is a pause rather than a failure.
 
+### Telling a run where it is
+
+Capability is not the same as knowing you have it. A run can hold a GitHub token and a
+kubeconfig and still do nothing useful, because nothing told it there is a cluster
+worth looking at or that pushing to git is how a deploy happens. Three places carry
+that knowledge, and picking the right one matters:
+
+| Put it in | When it applies | Good for |
+|---|---|---|
+| **Environment briefing** (Settings) | Every run, always | "You are in a Kubernetes cluster. ArgoCD syncs from git and `selfHeal` reverts anything not in it. A republished `:latest` needs `rollout restart`. Verify with `rollout status` before claiming success." |
+| **Appended system prompt** (per prompt) | Every run of one prompt | "Only ever touch the `media/` directory." "Never merge a PR that changes CI." |
+| **The prompt text** | The task itself | "Review the open PRs and merge the green dependency ones." |
+
+The briefing is the one that answers *"how do I tell it that it has a cluster?"*. It
+ships with a default covering the whole loop — what is installed, what it may and may
+not touch, the three shapes a deploy takes, which `kubectl` commands actually confirm a
+rollout, and that a green push is not a deploy. Edit it in Settings; it is your cluster,
+and it should say so.
+
+Two things worth stating explicitly, because a model that does not know them will fight
+your platform:
+
+- **Git is the source of truth.** With `selfHeal: true` and `prune: true`, anything
+  created in-cluster that is not also in git gets reverted or deleted on the next sync.
+  A run that edits a live Deployment may report success in the window before that
+  happens.
+- **A republished tag is invisible to ArgoCD.** When CI pushes `:latest` again, the
+  manifest is byte-identical, so there is no drift to sync and the old pods keep
+  running. That is the case where `kubectl rollout restart` is the right answer rather
+  than a workaround — and the reason the ServiceAccount can do it.
+
 Worked example — a prompt that keeps dependency PRs moving:
 
 - **Model** `claude-sonnet-5`
@@ -143,6 +189,20 @@ Worked example — a prompt that keeps dependency PRs moving:
 - **Env** `GITHUB_TOKEN=${GITHUB_TOKEN}` (forwarded from a secret)
 - **Trigger** `session_reset` — it runs the moment tokens are available again
 - **Completion check** `marker` — so a resume only happens if it really was cut short
+
+The image ships `git`, `gh`, `kubectl`, `ripgrep` and `jq` next to the Claude CLI, so a
+prompt can clone, branch, push, merge, deploy the result and check that it came up.
+
+`kubectl` authenticates as the pod's ServiceAccount. The manifests in the companion repo
+grant read access to everything except Secrets, plus enough write access to take a change
+all the way to running: create ArgoCD Applications, and `rollout restart` a Deployment.
+Most changes still go through git — but two things git alone cannot do are registering a
+new app with ArgoCD, and redeploying when CI republishes a moving tag like `:latest` and
+the manifest is therefore unchanged.
+
+Set `EXPOSE_KUBERNETES=false` to withhold cluster access entirely: `kubectl` builds its
+in-cluster config from `KUBERNETES_SERVICE_HOST`/`PORT`, so not forwarding those is what
+actually turns it off.
 
 ---
 
@@ -173,7 +233,7 @@ back that up and you have backed up KubeClaude.
 | `GET /api/runs`, `/api/runs/:id`, `/api/runs/:id/events`, `/api/runs/:id/thread` | Runs |
 | `POST /api/runs/:id/cancel`, `/resume`, `/follow-up` | Act on a run |
 | `GET POST /api/mcp-servers`, `PATCH DELETE /api/mcp-servers/:id` | MCP connections |
-| `GET PATCH /api/settings` | Settings |
+| `GET PATCH /api/settings`, `GET /api/settings/defaults` | Settings, and the shipped defaults |
 | `GET /api/stream` | SSE: run created/updated, run output, quota changed |
 | `GET /healthz`, `/readyz` | Probes (never require the auth token). `/readyz` reports credential state but stays ready without it, so a missing token does not take the UI offline. |
 

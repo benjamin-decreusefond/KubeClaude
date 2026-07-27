@@ -24,6 +24,7 @@ const { createMcpServer } = await import('../src/store/mcp.js');
 const runStore = await import('../src/store/runs.js');
 const { getActiveWindow } = await import('../src/store/usage.js');
 const { enqueueRun } = await import('../src/queue.js');
+const { updateSettings } = await import('../src/store/settings.js');
 const { sweepAutoResumes } = await import('../src/scheduler.js');
 import type { Prompt, Run } from '../src/types.js';
 
@@ -300,6 +301,79 @@ test('marker mode tells the model how to announce completion', async () => {
   const index = call!.argv.indexOf('--append-system-prompt');
   assert.notEqual(index, -1);
   assert.match(call!.argv[index + 1]!, /output the exact line ALL_DONE/);
+});
+
+test('the environment briefing reaches every run, ahead of the prompt’s own instructions', async () => {
+  updateSettings({ environmentBriefing: 'BRIEFING: you are in a cluster.' });
+  const prompt = makePrompt({ appendSystemPrompt: 'PROMPT_RULE: only touch media/.' });
+  await waitForTerminal(enqueueRun({ promptId: prompt.id, triggerType: 'manual' })!.id);
+
+  const [call] = invocations();
+  const system = call!.argv[call!.argv.indexOf('--append-system-prompt') + 1]!;
+  assert.ok(system.includes('BRIEFING: you are in a cluster.'));
+  assert.ok(system.includes('PROMPT_RULE: only touch media/.'));
+  assert.ok(
+    system.indexOf('BRIEFING') < system.indexOf('PROMPT_RULE'),
+    'the briefing must come first, so the prompt can narrow it',
+  );
+});
+
+test('an empty briefing adds nothing', async () => {
+  updateSettings({ environmentBriefing: '' });
+  const prompt = makePrompt();
+  await waitForTerminal(enqueueRun({ promptId: prompt.id, triggerType: 'manual' })!.id);
+  assert.equal(invocations()[0]!.argv.includes('--append-system-prompt'), false);
+});
+
+test('kubectl can find the cluster from inside a run', async () => {
+  process.env.KUBERNETES_SERVICE_HOST = '10.43.0.1';
+  process.env.KUBERNETES_SERVICE_PORT = '443';
+  const prompt = makePrompt();
+  await waitForTerminal(enqueueRun({ promptId: prompt.id, triggerType: 'manual' })!.id);
+
+  // The runner reports the env keys it handed to the CLI.
+  const events = runStore
+    .listEvents(runStore.listRuns({ promptId: prompt.id, limit: 1 })[0]!.id)
+    .filter((e) => e.kind === 'system');
+  const invocation = events.find(
+    (e) => (e.payload as Record<string, unknown>).kind === 'invocation',
+  )!.payload as { envKeys: string[] };
+  assert.ok(invocation.envKeys.includes('KUBERNETES_SERVICE_HOST'));
+  assert.ok(invocation.envKeys.includes('KUBERNETES_SERVICE_PORT'));
+
+  delete process.env.KUBERNETES_SERVICE_HOST;
+  delete process.env.KUBERNETES_SERVICE_PORT;
+});
+
+test('a repo’s own CLAUDE.md is never overwritten', async () => {
+  const repo = fs.mkdtempSync(path.join(tmpDir, 'repo-'));
+  const target = path.join(repo, 'CLAUDE.md');
+  fs.writeFileSync(target, '# The repository’s own conventions\nDo not lose me.', 'utf8');
+
+  const prompt = makePrompt({ workingDir: repo, claudeMd: 'KubeClaude standing context' });
+  await waitForTerminal(enqueueRun({ promptId: prompt.id, triggerType: 'manual' })!.id);
+
+  // The checkout is intact...
+  assert.match(fs.readFileSync(target, 'utf8'), /Do not lose me\./);
+  // ...and the content was delivered the other way instead.
+  const [call] = invocations();
+  const system = call!.argv[call!.argv.indexOf('--append-system-prompt') + 1]!;
+  assert.ok(system.includes('KubeClaude standing context'));
+});
+
+test('a CLAUDE.md KubeClaude wrote is replaced on the next run', async () => {
+  const workspace = fs.mkdtempSync(path.join(tmpDir, 'ws-'));
+  const target = path.join(workspace, 'CLAUDE.md');
+
+  const first = makePrompt({ workingDir: workspace, claudeMd: 'first version' });
+  await waitForTerminal(enqueueRun({ promptId: first.id, triggerType: 'manual' })!.id);
+  assert.match(fs.readFileSync(target, 'utf8'), /first version/);
+
+  const second = makePrompt({ workingDir: workspace, claudeMd: 'second version' });
+  await waitForTerminal(enqueueRun({ promptId: second.id, triggerType: 'manual' })!.id);
+  const content = fs.readFileSync(target, 'utf8');
+  assert.match(content, /second version/);
+  assert.ok(!content.includes('first version'));
 });
 
 test('a run that never returns is killed at its timeout', async () => {

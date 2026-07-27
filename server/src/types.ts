@@ -189,6 +189,12 @@ export interface Settings {
   defaultModel: string | null;
   /** Env injected into every run, before the prompt's own env. */
   globalEnv: Record<string, string>;
+  /**
+   * Standing description of the environment, prepended to every run's system
+   * prompt. This is where a scheduled run learns that it has a cluster, a
+   * GitHub token, and a GitOps loop to work through. Empty disables it.
+   */
+  environmentBriefing: string;
   /** Timezone used for new cron triggers and for UI date rendering. */
   timezone: string;
   /** Master switch for resuming rate-limited runs when the quota returns. */

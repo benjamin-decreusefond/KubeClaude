@@ -25,12 +25,12 @@ const EXAMPLES: Array<{ label: string; name: string; config: string }> = [
   },
   {
     label: 'Local stdio command',
-    name: 'github',
+    name: 'linear',
     config: JSON.stringify(
       {
         command: 'npx',
-        args: ['-y', '@modelcontextprotocol/server-github'],
-        env: { GITHUB_PERSONAL_ACCESS_TOKEN: '${GITHUB_TOKEN}' },
+        args: ['-y', 'mcp-remote', 'https://mcp.linear.app/sse'],
+        env: { LINEAR_API_KEY: '${LINEAR_API_KEY}' },
       },
       null,
       2,
@@ -49,8 +49,13 @@ export function McpServers() {
           <h1>MCP connections</h1>
           <p>
             Connection details for MCP servers that run somewhere else. KubeClaude never starts or hosts a
-            server — it writes these entries into the <code>.mcp.json</code> it hands to Claude, so a prompt
-            can reach GitHub, your cluster, or anything else that speaks MCP.
+            server — it writes these entries into the <code>.mcp.json</code> it hands to Claude.
+          </p>
+          <p style={{ marginTop: 8 }}>
+            Reach for this when a service has no CLI. GitHub and Kubernetes already do:{' '}
+            <code>gh</code> and <code>kubectl</code> ship in the image and authenticate from the environment
+            and the pod's ServiceAccount, which is simpler than brokering the same APIs through a server that
+            can be down.
           </p>
         </div>
         <button className="primary" onClick={() => setEditing('new')}>

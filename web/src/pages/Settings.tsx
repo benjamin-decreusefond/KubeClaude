@@ -11,6 +11,7 @@ export function SettingsPage() {
   const { data: status } = usePolled<Status>(() => api.status(), 20_000);
   const { data: capabilities } = usePolled<Capabilities>(() => api.capabilities(), 0);
   const { data: modelData } = usePolled<{ models: ModelOption[] }>(() => api.models(), 0);
+  const { data: defaults } = usePolled<Settings>(() => api.settingsDefaults(), 0);
 
   const [draft, setDraft] = useState<Settings | null>(null);
   const [saving, setSaving] = useState(false);
@@ -111,6 +112,39 @@ export function SettingsPage() {
         >
           <KeyValueEditor value={draft.globalEnv} onChange={(globalEnv) => patch({ globalEnv })} />
         </Field>
+      </Card>
+
+      <Card
+        title="Environment briefing"
+        subtitle="What every run is told before its own instructions"
+      >
+        <p className="secondary" style={{ marginBottom: 12 }}>
+          A scheduled run starts with no history and nobody to ask, so anything it needs to know about this
+          platform has to be stated up front: that it has a cluster to inspect, a GitHub token to push and
+          merge with, and that changes reach the cluster through git rather than <code>kubectl</code>. This
+          text goes into every run's system prompt, ahead of the prompt itself. Prompt-specific detail
+          belongs on the prompt, not here.
+        </p>
+        <Field label="Briefing" hint="Markdown. Leave empty to send nothing.">
+          <textarea
+            value={draft.environmentBriefing}
+            onChange={(event) => patch({ environmentBriefing: event.target.value })}
+            style={{ minHeight: 320 }}
+          />
+        </Field>
+        <div className="row">
+          <button
+            type="button"
+            className="ghost small"
+            disabled={!defaults}
+            onClick={() => defaults && patch({ environmentBriefing: defaults.environmentBriefing })}
+          >
+            Restore the default briefing
+          </button>
+          <span className="stat-note">
+            {draft.environmentBriefing.length.toLocaleString()} characters, sent on every run
+          </span>
+        </div>
       </Card>
 
       <Card

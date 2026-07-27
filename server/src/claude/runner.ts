@@ -14,6 +14,8 @@ export interface RunnerOptions {
   promptText: string;
   /** Claude session to continue instead of starting fresh. */
   resumeSessionId?: string | null;
+  /** Standing description of the environment, placed ahead of everything else. */
+  environmentBriefing?: string;
   /** Extra system prompt text appended after the prompt's own. */
   appendSystemPrompt?: string;
   /** Extra env for this invocation only, merged last. */
@@ -75,6 +77,16 @@ function buildEnv(options: RunnerOptions, home: string): NodeJS.ProcessEnv {
     KUBECLAUDE_PROMPT_NAME: options.prompt.name,
   };
 
+  // kubectl finds the in-cluster API server through these two, and reads the
+  // ServiceAccount token from its mounted path. Without them it has no config
+  // at all, which is why this is the switch for cluster access.
+  if (config.exposeKubernetes) {
+    for (const key of ['KUBERNETES_SERVICE_HOST', 'KUBERNETES_SERVICE_PORT', 'KUBERNETES_SERVICE_PORT_HTTPS']) {
+      const value = process.env[key];
+      if (value) base[key] = value;
+    }
+  }
+
   for (const [key, value] of Object.entries(process.env)) {
     if (value === undefined) continue;
     if (forwardedEnvPrefixes.some((prefix) => key.startsWith(prefix))) base[key] = value;
@@ -115,14 +127,17 @@ async function prepare(options: RunnerOptions): Promise<PreparedInvocation> {
   const model = prompt.model?.trim() || options.defaultModel?.trim();
   if (model) args.push('--model', model);
 
-  // In marker mode the model has to know how to announce that it is done,
-  // otherwise the completion check can never say "finished".
-  const systemPromptParts = [prompt.appendSystemPrompt?.trim(), options.appendSystemPrompt?.trim()].filter(
-    (part): part is string => Boolean(part),
-  );
-  if (systemPromptParts.length > 0) {
-    args.push('--append-system-prompt', systemPromptParts.join('\n\n'));
-  }
+  // Order matters: the environment briefing establishes where the run is and
+  // what it may do, before the prompt's own instructions narrow that down. The
+  // last part is added by the caller — in marker mode it tells the model how to
+  // announce that it finished, without which the completion check can never say
+  // "done". Assembled here, but only pushed once everything is known.
+  const systemPromptParts = [
+    options.environmentBriefing?.trim(),
+    prompt.appendSystemPrompt?.trim(),
+    options.appendSystemPrompt?.trim(),
+  ].filter((part): part is string => Boolean(part));
+
   if (prompt.allowedTools.length > 0) args.push('--allowed-tools', prompt.allowedTools.join(','));
   if (prompt.disallowedTools.length > 0) args.push('--disallowed-tools', prompt.disallowedTools.join(','));
   if (prompt.permissionMode && prompt.permissionMode !== 'default') {
@@ -146,12 +161,49 @@ async function prepare(options: RunnerOptions): Promise<PreparedInvocation> {
     args.push('--settings', file);
   }
   if (prompt.claudeMd?.trim()) {
-    await fsp.writeFile(path.join(cwd, 'CLAUDE.md'), prompt.claudeMd, 'utf8');
+    const written = await writeManagedClaudeMd(cwd, prompt.claudeMd);
+    if (!written) {
+      // The working directory already has a CLAUDE.md somebody else owns —
+      // usually a cloned repo's. Overwriting it would corrupt the checkout, so
+      // deliver the same content through the system prompt instead.
+      systemPromptParts.push(prompt.claudeMd.trim());
+      options.onEvent('system', {
+        kind: 'claude-md-preserved',
+        path: path.join(cwd, 'CLAUDE.md'),
+        reason:
+          'The working directory already contains a CLAUDE.md that KubeClaude did not write. ' +
+          'It was left untouched, and the prompt’s own CLAUDE.md went into the system prompt instead.',
+      });
+    }
+  }
+
+  if (systemPromptParts.length > 0) {
+    args.push('--append-system-prompt', systemPromptParts.join('\n\n'));
   }
 
   if (options.resumeSessionId) args.push('--resume', options.resumeSessionId);
 
   return { args, cwd, env: buildEnv(options, home), cleanup };
+}
+
+/** Marks a CLAUDE.md as ours, so a later run knows it may be replaced. */
+const MANAGED_MARKER = '<!-- managed by KubeClaude -->';
+
+/**
+ * Write the prompt's CLAUDE.md, but never over a file we did not write.
+ * Returns false when an existing, unmanaged CLAUDE.md was left alone.
+ */
+async function writeManagedClaudeMd(cwd: string, content: string): Promise<boolean> {
+  const target = path.join(cwd, 'CLAUDE.md');
+  try {
+    const existing = await fsp.readFile(target, 'utf8');
+    if (!existing.startsWith(MANAGED_MARKER)) return false;
+  } catch (error) {
+    // Anything other than "not there" means we cannot tell; leave it alone.
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return false;
+  }
+  await fsp.writeFile(target, `${MANAGED_MARKER}\n${content}`, 'utf8');
+  return true;
 }
 
 const num = (value: unknown): number =>
