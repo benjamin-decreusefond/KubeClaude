@@ -4,7 +4,16 @@ import { KeyValueEditor } from '../components/KeyValueEditor';
 import { Badge, Banner, Card, Checkbox, Field } from '../components/primitives';
 import { formatTokens } from '../format';
 import { usePolled } from '../hooks';
-import type { BudgetBasis, Capabilities, ModelOption, Settings, Status } from '../types';
+import type { BillingMode, BudgetBasis, Capabilities, ModelOption, Settings, Status } from '../types';
+
+const BILLING_NOTE: Record<BillingMode, string> = {
+  subscription:
+    'Your Claude plan pays for these runs, exactly as it does in the desktop app or the terminal — no per-token charge. That also means the 5-hour and weekly windows below track a real allowance, and running out of it is what auto-resume waits on.',
+  api: 'Per-token API billing against your Console credit. There is no 5-hour or weekly allowance to run out of, so the quota triggers and auto-resume degrade to plain schedules. Set CLAUDE_CODE_OAUTH_TOKEN (from claude setup-token) to spend a subscription instead.',
+  gateway:
+    'Requests go through your own gateway, so how they are billed is between you and it. The quota windows below only mean something if the gateway is fronting a subscription.',
+  none: 'No credential is configured.',
+};
 
 const BASIS_HINTS: Record<BudgetBasis, string> = {
   weighted:
@@ -74,11 +83,20 @@ export function SettingsPage() {
               ))}
               .
             </p>
-            <p className="stat-note">
-              {capabilities?.credentials.variables.includes('CLAUDE_CODE_OAUTH_TOKEN')
-                ? 'A subscription token, so the 5-hour and weekly windows below track a real allowance.'
-                : 'API billing, which has no 5-hour or weekly allowance to run out of — quota triggers and auto-resume will behave like plain schedules. Set CLAUDE_CODE_OAUTH_TOKEN (from claude setup-token) to use a subscription instead.'}
-            </p>
+            <p className="stat-note">{BILLING_NOTE[capabilities?.credentials.mode ?? 'none']}</p>
+            {capabilities?.credentials.ignored.length ? (
+              <Banner tone="warning">
+                Also set in the pod but <strong>not</strong> forwarded:{' '}
+                {capabilities.credentials.ignored.map((name, index) => (
+                  <span key={name}>
+                    {index > 0 ? ', ' : ''}
+                    <code>{name}</code>
+                  </span>
+                ))}
+                . Only one credential is passed to a run, so there is never a question of which
+                one pays. Unset it to remove the ambiguity entirely.
+              </Banner>
+            ) : null}
           </>
         ) : (
           <Banner tone="critical">

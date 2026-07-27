@@ -3,7 +3,14 @@ import { promisify } from 'node:util';
 import type { FastifyInstance } from 'fastify';
 import { claudeVersion } from '../claude/runner.js';
 import { MODEL_CATALOG } from '../claude/models.js';
-import { claudeCredentials, config, forwardedEnvPrefixes, hasCredentials } from '../config.js';
+import {
+  billingMode,
+  claudeCredentials,
+  config,
+  forwardedEnvPrefixes,
+  hasCredentials,
+  shadowedCredentials,
+} from '../config.js';
 import { activeRunCount } from '../queue.js';
 import { countRuns } from '../store/runs.js';
 import { DEFAULT_SETTINGS, getSettings, updateSettings } from '../store/settings.js';
@@ -39,6 +46,7 @@ export async function systemRoutes(app: FastifyInstance): Promise<void> {
       version: process.env.APP_VERSION ?? 'dev',
       claudeVersion: await claudeVersion(),
       credentialsConfigured: hasCredentials(),
+      billingMode: billingMode(),
       maxConcurrentRuns: config.maxConcurrentRuns,
       activeRuns: activeRunCount(),
       queuedRuns: countRuns({ status: 'queued' }),
@@ -66,7 +74,9 @@ export async function systemRoutes(app: FastifyInstance): Promise<void> {
       tools,
       credentials: {
         configured: hasCredentials(),
+        mode: billingMode(),
         variables: Object.keys(claudeCredentials()).sort(),
+        ignored: shadowedCredentials(),
       },
       forwardedEnvPrefixes,
       forwardedEnvNames: Object.keys(process.env)

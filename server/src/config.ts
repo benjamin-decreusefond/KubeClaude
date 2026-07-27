@@ -54,26 +54,62 @@ export const config = {
   webDir: process.env.WEB_DIR ?? path.resolve(process.cwd(), 'web/dist'),
 } as const;
 
+/** How a run is paying for itself. */
+export type BillingMode = 'subscription' | 'api' | 'gateway' | 'none';
+
 /**
- * Credentials handed to every Claude invocation. Either an API key or a
- * subscription OAuth token works; the OAuth token is what makes the 5h/weekly
- * session windows meaningful.
+ * Credentials handed to every Claude invocation.
+ *
+ * These are not interchangeable: a subscription token draws on the plan's
+ * rolling allowance, an API key bills per token against Console credit. Passing
+ * both would leave which one pays up to the CLI, so exactly one is forwarded —
+ * the subscription token wins, because that is the one the quota windows,
+ * quota-aware triggers and auto-resume are all built around. A gateway is its
+ * own thing and takes precedence over both, since a base URL is only ever set
+ * deliberately.
  */
 export function claudeCredentials(): Record<string, string> {
   const env: Record<string, string> = {};
-  if (process.env.ANTHROPIC_API_KEY) env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+
+  if (process.env.ANTHROPIC_BASE_URL) {
+    env.ANTHROPIC_BASE_URL = process.env.ANTHROPIC_BASE_URL;
+    if (process.env.ANTHROPIC_AUTH_TOKEN) env.ANTHROPIC_AUTH_TOKEN = process.env.ANTHROPIC_AUTH_TOKEN;
+    if (process.env.ANTHROPIC_API_KEY) env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+    return env;
+  }
+
   if (process.env.CLAUDE_CODE_OAUTH_TOKEN) {
     env.CLAUDE_CODE_OAUTH_TOKEN = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+    return env;
   }
-  if (process.env.ANTHROPIC_BASE_URL) env.ANTHROPIC_BASE_URL = process.env.ANTHROPIC_BASE_URL;
+
+  if (process.env.ANTHROPIC_API_KEY) env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
   if (process.env.ANTHROPIC_AUTH_TOKEN) env.ANTHROPIC_AUTH_TOKEN = process.env.ANTHROPIC_AUTH_TOKEN;
   return env;
 }
 
-export function hasCredentials(): boolean {
-  return Object.keys(claudeCredentials()).some((key) =>
-    ['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_AUTH_TOKEN'].includes(key),
+export function billingMode(): BillingMode {
+  const env = claudeCredentials();
+  if (env.ANTHROPIC_BASE_URL) return 'gateway';
+  if (env.CLAUDE_CODE_OAUTH_TOKEN) return 'subscription';
+  if (env.ANTHROPIC_API_KEY || env.ANTHROPIC_AUTH_TOKEN) return 'api';
+  return 'none';
+}
+
+/**
+ * Credentials that are set in the pod but deliberately not forwarded, so the UI
+ * can say "you also set an API key, it is being ignored" rather than leaving you
+ * to wonder which one is paying.
+ */
+export function shadowedCredentials(): string[] {
+  const forwarded = new Set(Object.keys(claudeCredentials()));
+  return ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN'].filter(
+    (name) => process.env[name] && !forwarded.has(name),
   );
+}
+
+export function hasCredentials(): boolean {
+  return billingMode() !== 'none';
 }
 
 /**

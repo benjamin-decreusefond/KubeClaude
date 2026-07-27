@@ -86,7 +86,7 @@ Everything is environment variables; the rest is configured in the UI.
 | Variable | Default | Purpose |
 |---|---|---|
 | `CLAUDE_CODE_OAUTH_TOKEN` | — | Claude subscription token. **This is the one that makes the 5-hour and weekly windows meaningful.** |
-| `ANTHROPIC_API_KEY` | — | Alternative: API billing. Set one or the other. |
+| `ANTHROPIC_API_KEY` | — | Alternative: per-token API billing. Ignored if the OAuth token is also set. |
 | `ANTHROPIC_BASE_URL` | — | For a gateway or proxy. |
 | `PORT` / `HOST` | `8080` / `0.0.0.0` | Listen address. |
 | `DATA_DIR` | `./data` | SQLite database, per-prompt workspaces, Claude's own config. **Must be persistent.** |
@@ -268,6 +268,17 @@ Claude:
 | Pro / Max subscription | `CLAUDE_CODE_OAUTH_TOKEN` | Run `claude setup-token` on a machine where you are already logged in; it prints a long-lived token (`sk-ant-oat…`). |
 | API credit (per token) | `ANTHROPIC_API_KEY` | Create a key in the [Claude Console](https://console.anthropic.com/settings/keys). |
 | A gateway in front of Claude | `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` | Whatever your proxy issues. |
+
+These are not interchangeable, and the difference is money. A subscription token
+spends your plan's allowance — the same bucket as the desktop app and the terminal, no
+per-token charge. An API key bills Console credit at published per-token rates and has no
+allowance to run out of.
+
+Because that distinction matters, KubeClaude forwards **exactly one** credential to a
+run rather than letting the CLI choose: a gateway if `ANTHROPIC_BASE_URL` is set,
+otherwise the subscription token, otherwise the API key. Set both a token and a key and
+the key is ignored — Settings says so out loud rather than leaving you to wonder which
+one is paying, and `/api/status` reports the resolved mode as `billingMode`.
 
 The subscription token is the one that makes the rest of this app mean anything: 5-hour
 and weekly windows, `session_reset` / `weekly_reset` / `quota_available` triggers and
