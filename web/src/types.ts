@@ -142,6 +142,8 @@ export interface UsageWindow {
   runCount: number;
 }
 
+export type BillingMode = 'subscription' | 'api' | 'gateway' | 'none';
+
 export type BudgetBasis = 'weighted' | 'input_output' | 'total';
 
 export interface QuotaSlice {
@@ -255,6 +257,7 @@ export interface Status {
   version: string;
   claudeVersion: string | null;
   credentialsConfigured: boolean;
+  billingMode: BillingMode;
   maxConcurrentRuns: number;
   activeRuns: number;
   queuedRuns: number;
@@ -265,7 +268,7 @@ export interface Status {
 
 export interface Capabilities {
   tools: Array<{ name: string; available: boolean }>;
-  credentials: { configured: boolean; variables: string[] };
+  credentials: { configured: boolean; mode: BillingMode; variables: string[]; ignored: string[] };
   forwardedEnvPrefixes: string[];
   forwardedEnvNames: string[];
   globalEnvNames: string[];
