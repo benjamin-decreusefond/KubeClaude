@@ -17,7 +17,14 @@ import { streamRoutes } from './routes/stream.js';
 import { systemRoutes } from './routes/system.js';
 import { triggerRoutes } from './routes/triggers.js';
 
-const PUBLIC_PATHS = new Set(['/healthz', '/readyz']);
+/**
+ * The token gates the API, not the static shell. Serving index.html and its
+ * assets unauthenticated costs nothing — they hold no data — and it is the only
+ * way the user can reach the dialog that asks for the token.
+ */
+function requiresAuth(url: string): boolean {
+  return (url.split('?')[0] ?? '').startsWith('/api/');
+}
 
 function tokenMatches(provided: string): boolean {
   const expected = Buffer.from(config.authToken);
@@ -34,7 +41,7 @@ async function buildServer() {
 
   if (config.authToken) {
     app.addHook('onRequest', async (request, reply) => {
-      if (PUBLIC_PATHS.has(request.url.split('?')[0] ?? '')) return;
+      if (!requiresAuth(request.url)) return;
 
       const header = request.headers.authorization ?? '';
       const bearer = header.startsWith('Bearer ') ? header.slice(7) : '';

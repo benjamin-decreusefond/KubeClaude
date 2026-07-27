@@ -9,7 +9,7 @@
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test --import tsx test/*.test.ts"
+    "test": "node --test --test-timeout=120000 --import tsx test/*.test.ts"
   },
   "dependencies": {
     "@fastify/static": "^8.0.4",

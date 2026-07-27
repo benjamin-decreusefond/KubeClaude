@@ -438,7 +438,11 @@ export async function claudeVersion(): Promise<string | null> {
 }
 
 export function ensureDirectories(): void {
-  for (const dir of [config.dataDir, config.workspacesDir, config.claudeHome]) {
+  const dirs = [config.dataDir, config.workspacesDir, config.claudeHome];
+  // A volume mounted over HOME hides whatever the image created there, so make
+  // sure it exists at startup — git and gh need somewhere to write.
+  if (process.env.HOME) dirs.push(process.env.HOME);
+  for (const dir of dirs) {
     fs.mkdirSync(dir, { recursive: true });
   }
 }

@@ -25,12 +25,13 @@ async function onPath(command: string): Promise<boolean> {
 export async function systemRoutes(app: FastifyInstance): Promise<void> {
   app.get('/healthz', async () => ({ status: 'ok' }));
 
-  app.get('/readyz', async (_request, reply) => {
-    if (!hasCredentials()) {
-      return reply.code(503).send({ status: 'no-credentials' });
-    }
-    return { status: 'ok' };
-  });
+  /**
+   * Ready as soon as the server can serve. Deliberately does *not* fail when
+   * Claude credentials are missing: that would drop the Service endpoints and
+   * lock you out of the UI that tells you the credentials are missing. The UI
+   * banner and `credentials` below are the signal instead.
+   */
+  app.get('/readyz', async () => ({ status: 'ok', credentials: hasCredentials() }));
 
   app.get('/api/status', async () => {
     const quota = getQuotaState();
