@@ -1,0 +1,115 @@
+import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
+import { enqueueRun } from '../queue.js';
+import * as promptStore from '../store/prompts.js';
+import * as triggerStore from '../store/triggers.js';
+import { listRuns } from '../store/runs.js';
+import { getSettings } from '../store/settings.js';
+import {
+  promptCreateSchema,
+  promptUpdateSchema,
+  runRequestSchema,
+  triggerCreateSchema,
+} from './schemas.js';
+
+const idParams = z.object({ id: z.string().min(1) });
+
+export async function promptRoutes(app: FastifyInstance): Promise<void> {
+  app.get('/api/prompts', async () => {
+    const prompts = promptStore.listPrompts();
+    return prompts.map((prompt) => ({
+      ...prompt,
+      triggers: triggerStore.listTriggers(prompt.id),
+      lastRun: listRuns({ promptId: prompt.id, limit: 1 })[0] ?? null,
+    }));
+  });
+
+  app.post('/api/prompts', async (request, reply) => {
+    const parsed = promptCreateSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'Invalid prompt', details: parsed.error.flatten() });
+    }
+    try {
+      const prompt = promptStore.createPrompt(parsed.data);
+      return reply.code(201).send(prompt);
+    } catch (error) {
+      if (String(error).includes('UNIQUE')) {
+        return reply.code(409).send({ error: 'A prompt with that name already exists' });
+      }
+      throw error;
+    }
+  });
+
+  app.get('/api/prompts/:id', async (request, reply) => {
+    const { id } = idParams.parse(request.params);
+    const prompt = promptStore.getPrompt(id);
+    if (!prompt) return reply.code(404).send({ error: 'Prompt not found' });
+    return {
+      ...prompt,
+      triggers: triggerStore.listTriggers(prompt.id),
+      recentRuns: listRuns({ promptId: prompt.id, limit: 20 }),
+    };
+  });
+
+  app.patch('/api/prompts/:id', async (request, reply) => {
+    const { id } = idParams.parse(request.params);
+    const parsed = promptUpdateSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'Invalid prompt', details: parsed.error.flatten() });
+    }
+    if (!promptStore.getPrompt(id)) return reply.code(404).send({ error: 'Prompt not found' });
+    try {
+      return promptStore.updatePrompt(id, parsed.data);
+    } catch (error) {
+      if (String(error).includes('UNIQUE')) {
+        return reply.code(409).send({ error: 'A prompt with that name already exists' });
+      }
+      throw error;
+    }
+  });
+
+  app.delete('/api/prompts/:id', async (request, reply) => {
+    const { id } = idParams.parse(request.params);
+    if (!promptStore.deletePrompt(id)) return reply.code(404).send({ error: 'Prompt not found' });
+    return reply.code(204).send();
+  });
+
+  app.post('/api/prompts/:id/run', async (request, reply) => {
+    const { id } = idParams.parse(request.params);
+    const parsed = runRequestSchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'Invalid request', details: parsed.error.flatten() });
+    }
+    const prompt = promptStore.getPrompt(id);
+    if (!prompt) return reply.code(404).send({ error: 'Prompt not found' });
+
+    const run = enqueueRun({
+      promptId: id,
+      triggerId: null,
+      triggerType: 'manual',
+      promptText: parsed.data.promptText,
+    });
+    if (!run) return reply.code(409).send({ error: 'Could not queue the run' });
+    return reply.code(202).send(run);
+  });
+
+  app.get('/api/prompts/:id/triggers', async (request, reply) => {
+    const { id } = idParams.parse(request.params);
+    if (!promptStore.getPrompt(id)) return reply.code(404).send({ error: 'Prompt not found' });
+    return triggerStore.listTriggers(id);
+  });
+
+  app.post('/api/prompts/:id/triggers', async (request, reply) => {
+    const { id } = idParams.parse(request.params);
+    if (!promptStore.getPrompt(id)) return reply.code(404).send({ error: 'Prompt not found' });
+    const parsed = triggerCreateSchema.safeParse({
+      timezone: getSettings().timezone,
+      ...(request.body as object),
+    });
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'Invalid trigger', details: parsed.error.flatten() });
+    }
+    const trigger = triggerStore.createTrigger({ promptId: id, ...parsed.data });
+    return reply.code(201).send(trigger);
+  });
+}
