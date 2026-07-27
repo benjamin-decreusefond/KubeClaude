@@ -138,6 +138,18 @@ The image ships `git`, `gh`, `kubectl`, `ripgrep` and `jq` alongside the Claude 
 prompt can clone a repo, push a branch, merge a pull request, and then check what the
 cluster made of it.
 
+CI publishes to Docker Hub as `paganim/kubeclaude`, tagged `latest` and the commit SHA,
+on every push to `main`. Pull requests build the image but do not push it. Two repository
+secrets are needed:
+
+| Secret | Value |
+|---|---|
+| `DOCKERHUB_USERNAME` | Your Docker Hub account name. |
+| `DOCKERHUB_TOKEN` | An access token from [Docker Hub → Account Settings → Personal access tokens](https://app.docker.com/settings/personal-access-tokens), scoped **Read & Write**. Not your password. |
+
+To publish under a different namespace, set a `DOCKERHUB_NAMESPACE` repository *variable*
+— the workflow falls back to `paganim` when it is unset.
+
 ---
 
 ## Letting a prompt finish the job
