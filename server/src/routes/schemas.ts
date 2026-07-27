@@ -105,6 +105,7 @@ export const settingsUpdateSchema = z.object({
   weeklyWindowDays: z.number().min(1).max(60).optional(),
   sessionTokenBudget: z.number().int().min(0).optional(),
   weeklyTokenBudget: z.number().int().min(0).optional(),
+  budgetBasis: z.enum(['weighted', 'input_output', 'total']).optional(),
   quotaGuardEnabled: z.boolean().optional(),
   quotaReservePct: z.number().min(0).max(90).optional(),
   defaultModel: z.string().max(120).nullable().optional(),

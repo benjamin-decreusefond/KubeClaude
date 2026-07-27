@@ -7,6 +7,7 @@ export const DEFAULT_SETTINGS: Settings = {
   weeklyWindowDays: 7,
   sessionTokenBudget: 0,
   weeklyTokenBudget: 0,
+  budgetBasis: 'weighted',
   quotaGuardEnabled: false,
   quotaReservePct: 0,
   defaultModel: null,

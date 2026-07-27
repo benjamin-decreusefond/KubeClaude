@@ -148,6 +148,19 @@ const MIGRATIONS: Array<{ name: string; up: string }> = [
       );
     `,
   },
+  {
+    name: '002_chats',
+    up: `
+      /*
+       * A chat is a prompt you talk to instead of scheduling. Same execution
+       * path, same threading, same quota accounting — it just does not appear
+       * in the prompt list and carries a display title instead of a name.
+       */
+      ALTER TABLE prompts ADD COLUMN kind TEXT NOT NULL DEFAULT 'scheduled';
+      ALTER TABLE prompts ADD COLUMN title TEXT;
+      CREATE INDEX idx_prompts_kind ON prompts(kind, updated_at DESC);
+    `,
+  },
 ];
 
 export function migrate(): void {

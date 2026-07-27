@@ -34,9 +34,19 @@ export type CompletionCheck =
   /** Never resume this prompt automatically. */
   | 'never';
 
+/**
+ * `scheduled` prompts are the ones you define once and let triggers fire.
+ * `chat` prompts are conversations you start directly and keep talking to;
+ * they run through exactly the same machinery.
+ */
+export type PromptKind = 'scheduled' | 'chat';
+
 export interface Prompt {
   id: string;
+  kind: PromptKind;
   name: string;
+  /** Display name for a chat, derived from its first message. */
+  title: string | null;
   description: string;
   prompt: string;
   enabled: boolean;
@@ -172,6 +182,13 @@ export interface UsageWindow {
   runCount: number;
 }
 
+/**
+ * Which tokens count against a budget. Agentic runs re-read a large cached
+ * prefix on every turn, so counting cache reads at face value makes any
+ * sanely-sized budget read as exhausted after a single run.
+ */
+export type BudgetBasis = 'weighted' | 'input_output' | 'total';
+
 export interface Settings {
   /** Length of a Claude session window, in hours. */
   sessionWindowHours: number;
@@ -181,6 +198,8 @@ export interface Settings {
   sessionTokenBudget: number;
   /** Token allowance per weekly window; 0 means unknown/unlimited. */
   weeklyTokenBudget: number;
+  /** How raw token counts are converted into budget spend. */
+  budgetBasis: BudgetBasis;
   /** Refuse to start runs once a budget is exhausted. */
   quotaGuardEnabled: boolean;
   /** Keep this share (0-100) of each budget unspent when the guard is on. */

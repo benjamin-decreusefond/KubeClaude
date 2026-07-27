@@ -10,6 +10,7 @@ import { logger } from './logger.js';
 import { beginShutdown, drain } from './queue.js';
 import { startScheduler, stopScheduler } from './scheduler.js';
 import { failOrphanedRuns, pruneOldRuns } from './store/runs.js';
+import { chatRoutes } from './routes/chats.js';
 import { mcpRoutes } from './routes/mcp.js';
 import { promptRoutes } from './routes/prompts.js';
 import { runRoutes } from './routes/runs.js';
@@ -69,6 +70,7 @@ async function buildServer() {
   await app.register(triggerRoutes);
   await app.register(runRoutes);
   await app.register(mcpRoutes);
+  await app.register(chatRoutes);
   await app.register(streamRoutes);
 
   if (config.serveWeb && fs.existsSync(config.webDir)) {

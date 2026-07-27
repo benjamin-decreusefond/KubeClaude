@@ -12,7 +12,13 @@ import {
   triggerLabel,
 } from '../format';
 import { usePolled, useStream, useTicker } from '../hooks';
-import type { Dashboard as DashboardData, QuotaSlice, Status } from '../types';
+import type { BudgetBasis, Dashboard as DashboardData, QuotaSlice, Status } from '../types';
+
+const BASIS_NOTE: Record<BudgetBasis, string> = {
+  weighted: 'Cache reads count at 0.1x and cache writes at 1.25x.',
+  input_output: 'Cache traffic is excluded.',
+  total: '',
+};
 
 export function Dashboard() {
   const { data, refresh } = usePolled<DashboardData>(() => api.dashboard(), 20_000);
@@ -290,7 +296,7 @@ function QuotaCard({
       }
     >
       <Stat
-        label="Tokens used"
+        label={budgeted && slice.basis !== 'total' ? 'Tokens counted' : 'Tokens used'}
         value={formatTokens(slice.used)}
         hero
         note={
@@ -309,6 +315,11 @@ function QuotaCard({
             leftLabel={`${formatTokens(slice.remaining ?? 0)} left`}
             rightLabel={slice.window ? `${slice.window.runCount} runs in window` : undefined}
           />
+          {slice.window && slice.basis !== 'total' ? (
+            <p className="stat-note" style={{ marginTop: 8 }}>
+              {BASIS_NOTE[slice.basis]} Raw total this window: {formatTokens(slice.window.totalTokens)}.
+            </p>
+          ) : null}
         </div>
       ) : (
         <p className="stat-note" style={{ marginTop: 12 }}>

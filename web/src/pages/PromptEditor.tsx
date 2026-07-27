@@ -8,7 +8,12 @@ import { usePolled } from '../hooks';
 import { TriggerList } from './TriggerEditor';
 import type { Capabilities, McpServer, ModelOption, Prompt, Settings } from '../types';
 
-type Draft = Omit<Prompt, 'id' | 'createdAt' | 'updatedAt' | 'lastSessionId' | 'triggers' | 'lastRun' | 'recentRuns'>;
+// This editor only ever handles scheduled prompts; chats are edited by talking
+// to them, so kind and title are not part of the form.
+type Draft = Omit<
+  Prompt,
+  'id' | 'kind' | 'title' | 'createdAt' | 'updatedAt' | 'lastSessionId' | 'triggers' | 'lastRun' | 'recentRuns'
+>;
 
 const EMPTY_DRAFT: Draft = {
   name: '',
@@ -63,7 +68,18 @@ export function PromptEditor() {
 
   useEffect(() => {
     if (!existing) return;
-    const { id: _id, createdAt, updatedAt, lastSessionId, triggers, lastRun, recentRuns, ...rest } = existing;
+    const {
+      id: _id,
+      kind: _kind,
+      title: _title,
+      createdAt,
+      updatedAt,
+      lastSessionId,
+      triggers,
+      lastRun,
+      recentRuns,
+      ...rest
+    } = existing;
     setDraft(rest);
   }, [existing?.id, existing?.updatedAt]);
 
