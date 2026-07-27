@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { boolFromDb, boolToDb, db, jsonFromDb } from '../db.js';
-import type { CompletionCheck, PermissionMode, Prompt } from '../types.js';
+import type { CompletionCheck, PermissionMode, Prompt, PromptKind } from '../types.js';
 
 interface PromptRow {
   id: string;
+  kind: string;
   name: string;
+  title: string | null;
   description: string;
   prompt: string;
   enabled: number;
@@ -36,7 +38,9 @@ interface PromptRow {
 function toPrompt(row: PromptRow): Prompt {
   return {
     id: row.id,
+    kind: row.kind as PromptKind,
     name: row.name,
+    title: row.title,
     description: row.description,
     prompt: row.prompt,
     enabled: boolFromDb(row.enabled),
@@ -68,10 +72,21 @@ function toPrompt(row: PromptRow): Prompt {
 
 export type PromptInput = Omit<Prompt, 'id' | 'createdAt' | 'updatedAt' | 'lastSessionId'>;
 
+/** Scheduled prompts only; chats have their own listing. */
 export function listPrompts(): Prompt[] {
   return db
-    .prepare<[], PromptRow>('SELECT * FROM prompts ORDER BY name COLLATE NOCASE')
+    .prepare<[], PromptRow>("SELECT * FROM prompts WHERE kind = 'scheduled' ORDER BY name COLLATE NOCASE")
     .all()
+    .map(toPrompt);
+}
+
+/** Conversations, most recently touched first. */
+export function listChats(limit = 100): Prompt[] {
+  return db
+    .prepare<[number], PromptRow>(
+      "SELECT * FROM prompts WHERE kind = 'chat' ORDER BY updated_at DESC LIMIT ?",
+    )
+    .all(limit)
     .map(toPrompt);
 }
 
@@ -85,14 +100,16 @@ export function createPrompt(input: PromptInput): Prompt {
   const id = randomUUID();
   db.prepare(
     `INSERT INTO prompts (
-       id, name, description, prompt, enabled, model, working_dir, permission_mode,
+       id, kind, title, name, description, prompt, enabled, model, working_dir, permission_mode,
        allowed_tools, disallowed_tools, append_system_prompt, max_turns, timeout_seconds,
        env, mcp_config, mcp_server_ids, settings_json, claude_md, continue_session, last_session_id,
        auto_resume, max_auto_resumes, resume_prompt, completion_check, completion_marker,
        judge_model, created_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
+    input.kind,
+    input.title,
     input.name,
     input.description,
     input.prompt,
@@ -124,6 +141,8 @@ export function createPrompt(input: PromptInput): Prompt {
 }
 
 const COLUMN_BY_FIELD: Record<string, string> = {
+  kind: 'kind',
+  title: 'title',
   name: 'name',
   description: 'description',
   prompt: 'prompt',

@@ -39,6 +39,8 @@ let counter = 0;
 function makePrompt(overrides: Partial<Prompt> = {}): Prompt {
   counter += 1;
   return createPrompt({
+    kind: 'scheduled',
+    title: null,
     name: `prompt-${counter}`,
     description: '',
     prompt: 'Review the open PRs and merge the green ones',

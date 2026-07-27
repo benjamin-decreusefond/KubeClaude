@@ -14,9 +14,13 @@ export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'bypassPermiss
 
 export type CompletionCheck = 'marker' | 'judge' | 'always' | 'never';
 
+export type PromptKind = 'scheduled' | 'chat';
+
 export interface Prompt {
   id: string;
+  kind: PromptKind;
   name: string;
+  title: string | null;
   description: string;
   prompt: string;
   enabled: boolean;
@@ -138,10 +142,13 @@ export interface UsageWindow {
   runCount: number;
 }
 
+export type BudgetBasis = 'weighted' | 'input_output' | 'total';
+
 export interface QuotaSlice {
   kind: 'session' | 'weekly';
   window: UsageWindow | null;
   used: number;
+  basis: BudgetBasis;
   budget: number;
   remaining: number | null;
   remainingPct: number | null;
@@ -162,6 +169,7 @@ export interface Settings {
   weeklyWindowDays: number;
   sessionTokenBudget: number;
   weeklyTokenBudget: number;
+  budgetBasis: BudgetBasis;
   quotaGuardEnabled: boolean;
   quotaReservePct: number;
   defaultModel: string | null;
@@ -261,6 +269,34 @@ export interface Capabilities {
   forwardedEnvPrefixes: string[];
   forwardedEnvNames: string[];
   globalEnvNames: string[];
+}
+
+export interface ChatSummary {
+  id: string;
+  title: string;
+  model: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lastRun: Run | null;
+  messageCount: number;
+}
+
+export interface ChatDetail extends Prompt {
+  runs: Run[];
+  /** True while a turn is in flight; the composer holds messages until it clears. */
+  busy: boolean;
+}
+
+export interface StartChatInput {
+  message: string;
+  model?: string | null;
+  permissionMode?: PermissionMode;
+  workingDir?: string | null;
+  allowedTools?: string[];
+  disallowedTools?: string[];
+  mcpServerIds?: string[];
+  env?: Record<string, string>;
+  fromPromptId?: string;
 }
 
 export interface ModelOption {

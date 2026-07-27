@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import { api, getToken, setToken } from './api';
 import { usePolled, useTheme } from './hooks';
+import { Chat } from './pages/Chat';
+import { Chats } from './pages/Chats';
 import { Dashboard } from './pages/Dashboard';
 import { McpServers } from './pages/McpServers';
 import { PromptEditor } from './pages/PromptEditor';
@@ -36,6 +38,7 @@ export function App() {
           <NavLink to="/" end>
             Overview
           </NavLink>
+          <NavLink to="/chats">Chat</NavLink>
           <NavLink to="/prompts">
             Prompts
             {status && <span className="nav-count">{status.queuedRuns > 0 ? `${status.queuedRuns} queued` : ''}</span>}
@@ -93,6 +96,8 @@ export function App() {
 
         <Routes>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/chats" element={<Chats />} />
+          <Route path="/chats/:id" element={<Chat />} />
           <Route path="/prompts" element={<Prompts />} />
           <Route path="/prompts/new" element={<PromptEditor />} />
           <Route path="/prompts/:id" element={<PromptEditor />} />

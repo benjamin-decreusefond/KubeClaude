@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { db } from '../db.js';
-import type { UsageTotals, UsageWindow, WindowKind } from '../types.js';
+import type { BudgetBasis, UsageTotals, UsageWindow, WindowKind } from '../types.js';
 import { getSettings } from './settings.js';
 
 interface WindowRow {
@@ -114,11 +114,41 @@ export function addUsage(windowId: string, totals: UsageTotals): void {
   );
 }
 
+/**
+ * Multipliers used by the `weighted` basis, taken from Anthropic's published
+ * cache pricing: a cache read costs a tenth of a fresh input token and a cache
+ * write costs 1.25x (5-minute TTL). Counting them at face value is what makes a
+ * raw sum useless as a budget — a long agentic run re-reads its whole cached
+ * prefix every turn, so cache reads routinely dwarf everything else.
+ */
+export const CACHE_READ_WEIGHT = 0.1;
+export const CACHE_WRITE_WEIGHT = 1.25;
+
+/** Tokens counted against the budget, per the configured basis. */
+export function budgetedTokens(window: UsageWindow, basis: BudgetBasis): number {
+  switch (basis) {
+    case 'total':
+      return window.totalTokens;
+    case 'input_output':
+      return window.inputTokens + window.outputTokens;
+    case 'weighted':
+    default:
+      return Math.round(
+        window.inputTokens +
+          window.outputTokens +
+          window.cacheCreationTokens * CACHE_WRITE_WEIGHT +
+          window.cacheReadTokens * CACHE_READ_WEIGHT,
+      );
+  }
+}
+
 export interface QuotaSlice {
   kind: WindowKind;
   window: UsageWindow | null;
-  /** Tokens spent in the open window. */
+  /** Tokens counted against the budget in the open window, per `basis`. */
   used: number;
+  /** How `used` was derived from the window's raw counters. */
+  basis: BudgetBasis;
   /** Configured allowance; 0 means "not configured". */
   budget: number;
   /** Tokens left before the budget (minus reserve) is hit; null when unconfigured. */
@@ -140,9 +170,15 @@ export interface QuotaState {
   reason: string | null;
 }
 
-function slice(kind: WindowKind, budget: number, reservePct: number, at: Date): QuotaSlice {
+function slice(
+  kind: WindowKind,
+  budget: number,
+  reservePct: number,
+  basis: BudgetBasis,
+  at: Date,
+): QuotaSlice {
   const window = getActiveWindow(kind, at);
-  const used = window?.totalTokens ?? 0;
+  const used = window ? budgetedTokens(window, basis) : 0;
   const effectiveBudget = budget > 0 ? Math.max(0, Math.floor(budget * (1 - reservePct / 100))) : 0;
   const remaining = effectiveBudget > 0 ? Math.max(0, effectiveBudget - used) : null;
   const remainingPct =
@@ -151,6 +187,7 @@ function slice(kind: WindowKind, budget: number, reservePct: number, at: Date): 
     kind,
     window,
     used,
+    basis,
     budget: effectiveBudget,
     remaining,
     remainingPct,
@@ -162,8 +199,9 @@ function slice(kind: WindowKind, budget: number, reservePct: number, at: Date): 
 
 export function getQuotaState(at: Date = new Date()): QuotaState {
   const settings = getSettings();
-  const session = slice('session', settings.sessionTokenBudget, settings.quotaReservePct, at);
-  const weekly = slice('weekly', settings.weeklyTokenBudget, settings.quotaReservePct, at);
+  const basis = settings.budgetBasis;
+  const session = slice('session', settings.sessionTokenBudget, settings.quotaReservePct, basis, at);
+  const weekly = slice('weekly', settings.weeklyTokenBudget, settings.quotaReservePct, basis, at);
 
   let reason: string | null = null;
   if (settings.quotaGuardEnabled) {

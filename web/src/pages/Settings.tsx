@@ -4,7 +4,14 @@ import { KeyValueEditor } from '../components/KeyValueEditor';
 import { Badge, Banner, Card, Checkbox, Field } from '../components/primitives';
 import { formatTokens } from '../format';
 import { usePolled } from '../hooks';
-import type { Capabilities, ModelOption, Settings, Status } from '../types';
+import type { BudgetBasis, Capabilities, ModelOption, Settings, Status } from '../types';
+
+const BASIS_HINTS: Record<BudgetBasis, string> = {
+  weighted:
+    'Recommended. A long run re-reads its cached prefix every turn, so cache reads dominate the raw count while costing a tenth of a fresh input token. Weighting them keeps the gauge honest.',
+  input_output: 'Ignores cache traffic entirely. Simple, but understates a run that writes a large cache.',
+  total: 'Sums every reported token. Expect the gauge to hit 100% within one agentic run.',
+};
 
 export function SettingsPage() {
   const { data: loaded, refresh } = usePolled<Settings>(() => api.settings(), 0);
@@ -56,15 +63,23 @@ export function SettingsPage() {
 
       <Card title="Claude access" subtitle="Credentials come from the pod environment, never from this page">
         {status?.credentialsConfigured ? (
-          <p className="secondary">
-            Authenticated with{' '}
-            {capabilities?.credentials.variables.map((name) => (
-              <code key={name} style={{ marginRight: 6 }}>
-                {name}
-              </code>
-            ))}
-            .
-          </p>
+          <>
+            <p className="secondary">
+              Authenticated with{' '}
+              {(capabilities?.credentials.variables ?? []).map((name, index) => (
+                <span key={name}>
+                  {index > 0 ? ', ' : ''}
+                  <code>{name}</code>
+                </span>
+              ))}
+              .
+            </p>
+            <p className="stat-note">
+              {capabilities?.credentials.variables.includes('CLAUDE_CODE_OAUTH_TOKEN')
+                ? 'A subscription token, so the 5-hour and weekly windows below track a real allowance.'
+                : 'API billing, which has no 5-hour or weekly allowance to run out of — quota triggers and auto-resume will behave like plain schedules. Set CLAUDE_CODE_OAUTH_TOKEN (from claude setup-token) to use a subscription instead.'}
+            </p>
+          </>
         ) : (
           <Banner tone="critical">
             No credentials. Set <code>CLAUDE_CODE_OAUTH_TOKEN</code> for a Claude subscription — that is what
@@ -177,7 +192,7 @@ export function SettingsPage() {
             hint={
               draft.sessionTokenBudget > 0
                 ? `${formatTokens(draft.sessionTokenBudget)} tokens per 5h window.`
-                : 'Unset — the overview shows totals instead of a gauge, and quota triggers fall back to firing once per window. Anthropic does not publish an exact number, so set this from what you observe.'
+                : 'Unset — the overview shows totals instead of a gauge, and quota triggers fall back to firing once per window. Anthropic does not publish an exact number; community estimates put Pro near 44k, Max 5x near 88k and Max 20x near 220k per window, which are reasonable starting points to calibrate against what you observe.'
             }
           >
             <input
@@ -201,6 +216,20 @@ export function SettingsPage() {
             />
           </Field>
         </div>
+
+        <Field
+          label="What counts against the budget"
+          hint={BASIS_HINTS[draft.budgetBasis]}
+        >
+          <select
+            value={draft.budgetBasis}
+            onChange={(event) => patch({ budgetBasis: event.target.value as BudgetBasis })}
+          >
+            <option value="weighted">Weighted (cache reads x0.1, cache writes x1.25)</option>
+            <option value="input_output">Input + output only</option>
+            <option value="total">Every token at face value</option>
+          </select>
+        </Field>
 
         <Checkbox
           checked={draft.quotaGuardEnabled}

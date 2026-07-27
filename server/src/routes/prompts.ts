@@ -30,7 +30,7 @@ export async function promptRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'Invalid prompt', details: parsed.error.flatten() });
     }
     try {
-      const prompt = promptStore.createPrompt(parsed.data);
+      const prompt = promptStore.createPrompt({ ...parsed.data, kind: 'scheduled', title: null });
       return reply.code(201).send(prompt);
     } catch (error) {
       if (String(error).includes('UNIQUE')) {

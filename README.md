@@ -17,6 +17,11 @@ it stopped instead of starting over — unless it can tell the task was already 
 
 ## What it does
 
+**Chat.** Talk to Claude directly, with the same access a scheduled prompt gets. Each
+message resumes the same session, so it keeps its context and you can steer it as it
+works — ask it to look at something, watch what it finds, tell it what to do next. When
+a conversation does what you want, save it as a prompt and put it on a schedule.
+
 **Prompts.** A standing task: prompt text, model, permission mode, tool allow/deny
 lists, env, MCP connections, a working directory, a `CLAUDE.md`, a timeout.
 
@@ -230,6 +235,8 @@ back that up and you have backed up KubeClaude.
 | `GET POST /api/prompts`, `PATCH DELETE /api/prompts/:id` | Prompts |
 | `POST /api/prompts/:id/run` | Queue a run now |
 | `GET POST /api/prompts/:id/triggers`, `PATCH DELETE /api/triggers/:id` | Triggers |
+| `GET POST /api/chats`, `GET PATCH DELETE /api/chats/:id` | Conversations |
+| `POST /api/chats/:id/messages`, `/stop`, `/promote` | Reply, interrupt, save as a prompt |
 | `GET /api/runs`, `/api/runs/:id`, `/api/runs/:id/events`, `/api/runs/:id/thread` | Runs |
 | `POST /api/runs/:id/cancel`, `/resume`, `/follow-up` | Act on a run |
 | `GET POST /api/mcp-servers`, `PATCH DELETE /api/mcp-servers/:id` | MCP connections |
@@ -250,13 +257,55 @@ the quota → park → resume → complete path is covered without a token or a 
 
 ---
 
+## Authenticating to Claude
+
+The CLI needs credentials in its environment; KubeClaude passes exactly one set through
+to every run and never writes them to disk. Pick whichever matches how you pay for
+Claude:
+
+| How you pay | Variable | How to get it |
+|---|---|---|
+| Pro / Max subscription | `CLAUDE_CODE_OAUTH_TOKEN` | Run `claude setup-token` on a machine where you are already logged in; it prints a long-lived token (`sk-ant-oat…`). |
+| API credit (per token) | `ANTHROPIC_API_KEY` | Create a key in the [Claude Console](https://console.anthropic.com/settings/keys). |
+| A gateway in front of Claude | `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` | Whatever your proxy issues. |
+
+The subscription token is the one that makes the rest of this app mean anything: 5-hour
+and weekly windows, `session_reset` / `weekly_reset` / `quota_available` triggers and
+auto-resume all exist because a subscription has windows to run out of. An API key bills
+per token and never rate-limits you that way, so those triggers degrade to plain
+schedules.
+
+Interactive `claude login` is not an option in a pod — there is no browser to redirect
+to. `claude setup-token` is the headless equivalent, and it is what the Kubernetes
+manifests expect (`claude_code_oauth_token` in the ExternalSecret). `/api/status`
+reports which credential is in play, and the UI shows a banner when none is.
+
 ## A note on the numbers
 
-Anthropic does not publish exact token allowances for subscription plans, so the session
-and weekly budgets are yours to set from what you observe. Leave them at zero and the
-overview shows running totals instead of gauges, and `quota_available` triggers fall
-back to firing once per window — everything still works, you just do not get a
-percentage.
+Anthropic publishes per-token API pricing, but not the token allowance behind a Pro or
+Max subscription — the figures circulating in the community (roughly 44k per 5-hour
+window on Pro, 88k on Max 5x, 220k on Max 20x) are observed estimates, not documented
+limits, and Anthropic has adjusted them before. Treat them as a starting point, then
+calibrate against what your own overview shows.
+
+Leave the budgets at zero and the overview shows running totals instead of gauges, and
+`quota_available` triggers fall back to firing once per window — everything still works,
+you just do not get a percentage.
+
+**What counts as spend** matters more than the number you type. A run re-reads its whole
+cached prefix on every turn, so `cache_read_input_tokens` dominates the raw total while
+costing a tenth of a fresh input token. Summing all four counters at face value would put
+a single real run at several times a 44k budget. The **budget basis** setting decides how
+the raw counters become spend:
+
+| Basis | Counts | Use when |
+|---|---|---|
+| `weighted` (default) | input + output + 1.25 × cache writes + 0.1 × cache reads | You want the gauge to track what you are actually being charged for. |
+| `input_output` | input + output only | You want to ignore caching entirely. |
+| `total` | everything at face value | You are budgeting raw throughput, not cost. |
+
+Run history keeps the raw counters either way; only the gauge and the quota guard read
+the basis.
 
 ## License
 

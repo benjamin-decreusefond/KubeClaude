@@ -7,3 +7,6 @@ dist/
 data/
 coverage/
 .DS_Store
+
+# TypeScript incremental build state
+*.tsbuildinfo

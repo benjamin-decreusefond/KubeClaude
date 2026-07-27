@@ -21,6 +21,8 @@ after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
 
 function makePrompt(name: string) {
   return createPrompt({
+    kind: 'scheduled',
+    title: null,
     name,
     description: '',
     prompt: 'do the thing',
@@ -113,7 +115,12 @@ test('an interval trigger respects its period', () => {
 });
 
 test('quota_available waits until enough of the budget is free', () => {
-  updateSettings({ sessionTokenBudget: 1_000_000, weeklyTokenBudget: 10_000_000, quotaReservePct: 0 });
+  updateSettings({
+    sessionTokenBudget: 1_000_000,
+    weeklyTokenBudget: 10_000_000,
+    quotaReservePct: 0,
+    budgetBasis: 'total',
+  });
   const prompt = makePrompt('quota-prompt');
   const trigger = makeTrigger(prompt.id, {
     type: 'quota_available',
@@ -129,7 +136,7 @@ test('quota_available waits until enough of the budget is free', () => {
   db.prepare('UPDATE usage_windows SET total_tokens = ? WHERE id = ?').run(800_000, windows.session.id);
   assert.equal(shouldFire(trigger, now).fire, false);
 
-  updateSettings({ sessionTokenBudget: 0, weeklyTokenBudget: 0 });
+  updateSettings({ sessionTokenBudget: 0, weeklyTokenBudget: 0, budgetBasis: 'weighted' });
 });
 
 test('a minimum interval overrides every trigger type', () => {

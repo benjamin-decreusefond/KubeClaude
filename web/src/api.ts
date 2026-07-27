@@ -1,6 +1,9 @@
 import type {
   Capabilities,
+  ChatDetail,
+  ChatSummary,
   Dashboard,
+  StartChatInput,
   McpServer,
   ModelOption,
   Prompt,
@@ -114,6 +117,22 @@ export const api = {
   resumeRun: (id: string) => request<Run>(`/api/runs/${id}/resume`, { method: 'POST' }),
   followUp: (id: string, message: string) =>
     request<Run>(`/api/runs/${id}/follow-up`, { method: 'POST', body: JSON.stringify({ message }) }),
+
+  chats: () => request<ChatSummary[]>('/api/chats'),
+  chat: (id: string) => request<ChatDetail>(`/api/chats/${id}`),
+  startChat: (input: StartChatInput) =>
+    request<ChatDetail>('/api/chats', { method: 'POST', body: JSON.stringify(input) }),
+  sendChatMessage: (id: string, message: string) =>
+    request<Run>(`/api/chats/${id}/messages`, { method: 'POST', body: JSON.stringify({ message }) }),
+  stopChat: (id: string) => request<Run>(`/api/chats/${id}/stop`, { method: 'POST' }),
+  renameChat: (id: string, title: string) =>
+    request<Prompt>(`/api/chats/${id}`, { method: 'PATCH', body: JSON.stringify({ title }) }),
+  deleteChat: (id: string) => request<void>(`/api/chats/${id}`, { method: 'DELETE' }),
+  promoteChat: (id: string, name: string, prompt: string) =>
+    request<Prompt>(`/api/chats/${id}/promote`, {
+      method: 'POST',
+      body: JSON.stringify({ name, prompt }),
+    }),
 
   mcpServers: () => request<McpServer[]>('/api/mcp-servers'),
   createMcpServer: (input: Partial<McpServer>) =>
