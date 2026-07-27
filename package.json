@@ -1,0 +1,22 @@
+{
+  "name": "kubeclaude",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Web UI that schedules and runs Claude Code prompts inside Kubernetes",
+  "license": "MIT",
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "npm run build --workspace web && npm run build --workspace server",
+    "dev": "npm run dev --workspace server",
+    "dev:web": "npm run dev --workspace web",
+    "start": "node server/dist/index.js",
+    "typecheck": "npm run typecheck --workspace server && npm run typecheck --workspace web",
+    "test": "npm run test --workspace server"
+  }
+}

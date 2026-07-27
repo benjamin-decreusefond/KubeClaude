@@ -1,0 +1,270 @@
+export type RunStatus =
+  | 'queued'
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+  | 'cancelled'
+  | 'timeout'
+  | 'skipped'
+  | 'rate_limited';
+
+export type TriggerType = 'cron' | 'interval' | 'session_reset' | 'weekly_reset' | 'quota_available';
+
+export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions';
+
+export type CompletionCheck = 'marker' | 'judge' | 'always' | 'never';
+
+export interface Prompt {
+  id: string;
+  name: string;
+  description: string;
+  prompt: string;
+  enabled: boolean;
+  model: string | null;
+  workingDir: string | null;
+  permissionMode: PermissionMode;
+  allowedTools: string[];
+  disallowedTools: string[];
+  appendSystemPrompt: string | null;
+  maxTurns: number | null;
+  timeoutSeconds: number;
+  env: Record<string, string>;
+  mcpConfig: string | null;
+  mcpServerIds: string[];
+  settingsJson: string | null;
+  claudeMd: string | null;
+  continueSession: boolean;
+  lastSessionId: string | null;
+  autoResume: boolean;
+  maxAutoResumes: number;
+  resumePrompt: string | null;
+  completionCheck: CompletionCheck;
+  completionMarker: string | null;
+  judgeModel: string | null;
+  createdAt: string;
+  updatedAt: string;
+  triggers?: Trigger[];
+  lastRun?: Run | null;
+  recentRuns?: Run[];
+}
+
+export interface TriggerConfig {
+  intervalMinutes?: number;
+  minSessionTokensAvailable?: number;
+  minSessionPctAvailable?: number;
+  minWeeklyPctAvailable?: number;
+  minIntervalMinutes?: number;
+  delayMinutes?: number;
+}
+
+export interface Trigger {
+  id: string;
+  promptId: string;
+  type: TriggerType;
+  enabled: boolean;
+  cronExpression: string | null;
+  timezone: string;
+  config: TriggerConfig;
+  lastFiredAt: string | null;
+  nextFireAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ModelUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
+  costUsd: number;
+}
+
+export interface Run {
+  id: string;
+  promptId: string;
+  promptName: string;
+  triggerId: string | null;
+  triggerType: string;
+  status: RunStatus;
+  promptText: string;
+  queuedAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  durationMs: number | null;
+  sessionId: string | null;
+  exitCode: number | null;
+  error: string | null;
+  numTurns: number | null;
+  costUsd: number | null;
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
+  totalTokens: number;
+  resultText: string | null;
+  model: string | null;
+  modelUsage: Record<string, ModelUsage> | null;
+  durationApiMs: number | null;
+  serviceTier: string | null;
+  resumeOfRunId: string | null;
+  rootRunId: string;
+  followUpText: string | null;
+  resumeAttempt: number;
+  rateLimitResetAt: string | null;
+  autoResumePending: boolean;
+  completed: boolean | null;
+  completionReason: string | null;
+}
+
+export interface RunEvent {
+  runId: string;
+  seq: number;
+  ts: string;
+  kind: 'message' | 'stderr' | 'system';
+  payload: unknown;
+}
+
+export interface UsageWindow {
+  id: string;
+  kind: 'session' | 'weekly';
+  startedAt: string;
+  endsAt: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
+  totalTokens: number;
+  costUsd: number;
+  runCount: number;
+}
+
+export interface QuotaSlice {
+  kind: 'session' | 'weekly';
+  window: UsageWindow | null;
+  used: number;
+  budget: number;
+  remaining: number | null;
+  remainingPct: number | null;
+  resetsAt: string | null;
+  fresh: boolean;
+  exhausted: boolean;
+}
+
+export interface QuotaState {
+  session: QuotaSlice;
+  weekly: QuotaSlice;
+  canRun: boolean;
+  reason: string | null;
+}
+
+export interface Settings {
+  sessionWindowHours: number;
+  weeklyWindowDays: number;
+  sessionTokenBudget: number;
+  weeklyTokenBudget: number;
+  quotaGuardEnabled: boolean;
+  quotaReservePct: number;
+  defaultModel: string | null;
+  globalEnv: Record<string, string>;
+  timezone: string;
+  autoResumeEnabled: boolean;
+  autoResumeDelayMinutes: number;
+}
+
+export interface McpServer {
+  id: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+  config: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PeriodTotals {
+  runs: number;
+  succeeded: number;
+  failed: number;
+  rateLimited: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
+  totalTokens: number;
+  costUsd: number;
+  durationMs: number;
+  apiDurationMs: number;
+  turns: number;
+}
+
+export interface DailyPoint {
+  date: string;
+  runs: number;
+  totalTokens: number;
+  costUsd: number;
+}
+
+export interface ModelBreakdown extends ModelUsage {
+  model: string;
+  totalTokens: number;
+  runs: number;
+}
+
+export interface PromptBreakdown {
+  promptId: string;
+  promptName: string;
+  runs: number;
+  totalTokens: number;
+  costUsd: number;
+  failed: number;
+}
+
+export interface UpcomingRun {
+  triggerId: string;
+  promptId: string;
+  promptName: string;
+  type: string;
+  nextFireAt: string;
+  cronExpression: string | null;
+  timezone: string;
+}
+
+export interface Dashboard {
+  quota: QuotaState;
+  totals: { session: PeriodTotals; week: PeriodTotals; month: PeriodTotals; allTime: PeriodTotals };
+  daily: DailyPoint[];
+  models: ModelBreakdown[];
+  prompts: PromptBreakdown[];
+  sessionWindows: UsageWindow[];
+  weeklyWindows: UsageWindow[];
+  upcoming: UpcomingRun[];
+  recentRuns: Run[];
+  awaitingResume: Run[];
+}
+
+export interface Status {
+  version: string;
+  claudeVersion: string | null;
+  credentialsConfigured: boolean;
+  maxConcurrentRuns: number;
+  activeRuns: number;
+  queuedRuns: number;
+  awaitingResume: number;
+  quota: QuotaState;
+  settings: Settings;
+}
+
+export interface Capabilities {
+  tools: Array<{ name: string; available: boolean }>;
+  credentials: { configured: boolean; variables: string[] };
+  forwardedEnvPrefixes: string[];
+  forwardedEnvNames: string[];
+  globalEnvNames: string[];
+}
+
+export interface ModelOption {
+  id: string;
+  label: string;
+  description: string;
+  kind: 'alias' | 'model';
+}
