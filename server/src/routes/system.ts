@@ -6,7 +6,7 @@ import { MODEL_CATALOG } from '../claude/models.js';
 import { claudeCredentials, config, forwardedEnvPrefixes, hasCredentials } from '../config.js';
 import { activeRunCount } from '../queue.js';
 import { countRuns } from '../store/runs.js';
-import { getSettings, updateSettings } from '../store/settings.js';
+import { DEFAULT_SETTINGS, getSettings, updateSettings } from '../store/settings.js';
 import { getQuotaState, listWindows } from '../store/usage.js';
 import { getDashboard } from '../store/stats.js';
 import { settingsUpdateSchema } from './schemas.js';
@@ -85,6 +85,9 @@ export async function systemRoutes(app: FastifyInstance): Promise<void> {
   }));
 
   app.get('/api/settings', async () => getSettings());
+
+  /** The shipped defaults, so the UI can offer "restore" without duplicating them. */
+  app.get('/api/settings/defaults', async () => DEFAULT_SETTINGS);
 
   app.patch('/api/settings', async (request, reply) => {
     const parsed = settingsUpdateSchema.safeParse(request.body);

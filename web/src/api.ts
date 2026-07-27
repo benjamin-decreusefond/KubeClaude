@@ -68,6 +68,7 @@ export const api = {
     request<{ sessionWindows: UsageWindow[]; weeklyWindows: UsageWindow[] }>('/api/usage'),
 
   settings: () => request<Settings>('/api/settings'),
+  settingsDefaults: () => request<Settings>('/api/settings/defaults'),
   updateSettings: (patch: Partial<Settings>) =>
     request<Settings>('/api/settings', { method: 'PATCH', body: JSON.stringify(patch) }),
 

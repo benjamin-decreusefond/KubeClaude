@@ -142,6 +142,7 @@ async function execute(run: Run): Promise<void> {
       resumeSessionId: run.sessionId,
       globalEnv: settings.globalEnv,
       defaultModel: settings.defaultModel,
+      environmentBriefing: settings.environmentBriefing,
       appendSystemPrompt:
         prompt.completionCheck === 'marker' ? markerInstruction(markerFor(prompt)) : undefined,
       signal: controller.signal,

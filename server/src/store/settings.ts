@@ -1,3 +1,4 @@
+import { DEFAULT_ENVIRONMENT_BRIEFING } from '../claude/briefing.js';
 import { db } from '../db.js';
 import type { Settings } from '../types.js';
 
@@ -10,6 +11,7 @@ export const DEFAULT_SETTINGS: Settings = {
   quotaReservePct: 0,
   defaultModel: null,
   globalEnv: {},
+  environmentBriefing: DEFAULT_ENVIRONMENT_BRIEFING,
   timezone: process.env.TZ ?? 'UTC',
   autoResumeEnabled: true,
   autoResumeDelayMinutes: 1,

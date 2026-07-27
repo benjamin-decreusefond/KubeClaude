@@ -166,6 +166,7 @@ export interface Settings {
   quotaReservePct: number;
   defaultModel: string | null;
   globalEnv: Record<string, string>;
+  environmentBriefing: string;
   timezone: string;
   autoResumeEnabled: boolean;
   autoResumeDelayMinutes: number;

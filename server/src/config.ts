@@ -40,6 +40,15 @@ export const config = {
 
   /** Optional bearer token protecting the API and UI. */
   authToken: process.env.KUBECLAUDE_AUTH_TOKEN ?? '',
+  /**
+   * Let runs talk to the Kubernetes API with the pod's ServiceAccount.
+   * kubectl builds its in-cluster config from KUBERNETES_SERVICE_HOST/PORT, so
+   * withholding those is what actually turns cluster access off — the token
+   * file alone is useless without them. Set to false for a run that should be
+   * unable to reach the cluster at all.
+   */
+  exposeKubernetes: bool('EXPOSE_KUBERNETES', true),
+
   /** Serve the built SPA from the server. */
   serveWeb: bool('SERVE_WEB', true),
   webDir: process.env.WEB_DIR ?? path.resolve(process.cwd(), 'web/dist'),

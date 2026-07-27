@@ -109,6 +109,7 @@ export const settingsUpdateSchema = z.object({
   quotaReservePct: z.number().min(0).max(90).optional(),
   defaultModel: z.string().max(120).nullable().optional(),
   globalEnv: envRecord.optional(),
+  environmentBriefing: z.string().max(50_000).optional(),
   timezone: z.string().max(80).optional(),
   autoResumeEnabled: z.boolean().optional(),
   autoResumeDelayMinutes: z.number().int().min(0).max(1440).optional(),
