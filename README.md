@@ -160,20 +160,27 @@ that knowledge, and picking the right one matters:
 
 | Put it in | When it applies | Good for |
 |---|---|---|
-| **Environment briefing** (Settings) | Every run, always | "You are in a Kubernetes cluster. `kubectl` is read-only. ArgoCD syncs from git and `selfHeal` reverts manual edits. Verify with `rollout status` before claiming success." |
+| **Environment briefing** (Settings) | Every run, always | "You are in a Kubernetes cluster. ArgoCD syncs from git and `selfHeal` reverts anything not in it. A republished `:latest` needs `rollout restart`. Verify with `rollout status` before claiming success." |
 | **Appended system prompt** (per prompt) | Every run of one prompt | "Only ever touch the `media/` directory." "Never merge a PR that changes CI." |
 | **The prompt text** | The task itself | "Review the open PRs and merge the green dependency ones." |
 
 The briefing is the one that answers *"how do I tell it that it has a cluster?"*. It
-ships with a default covering the whole loop — what is installed, that cluster access is
-read-only, that changes go through git because `selfHeal: true` reverts anything else,
-which `kubectl` commands actually confirm a rollout, and that a green push is not a
-deploy. Edit it in Settings; it is your cluster, and it should say so.
+ships with a default covering the whole loop — what is installed, what it may and may
+not touch, the three shapes a deploy takes, which `kubectl` commands actually confirm a
+rollout, and that a green push is not a deploy. Edit it in Settings; it is your cluster,
+and it should say so.
 
-The thing worth stating explicitly, because a model that does not know it will fight
-your platform: **under GitOps, `kubectl` is for looking, not for changing.** A run that
-edits a live Deployment will see its change reverted minutes later and may well report
-success in between.
+Two things worth stating explicitly, because a model that does not know them will fight
+your platform:
+
+- **Git is the source of truth.** With `selfHeal: true` and `prune: true`, anything
+  created in-cluster that is not also in git gets reverted or deleted on the next sync.
+  A run that edits a live Deployment may report success in the window before that
+  happens.
+- **A republished tag is invisible to ArgoCD.** When CI pushes `:latest` again, the
+  manifest is byte-identical, so there is no drift to sync and the old pods keep
+  running. That is the case where `kubectl rollout restart` is the right answer rather
+  than a workaround — and the reason the ServiceAccount can do it.
 
 Worked example — a prompt that keeps dependency PRs moving:
 
@@ -184,12 +191,18 @@ Worked example — a prompt that keeps dependency PRs moving:
 - **Completion check** `marker` — so a resume only happens if it really was cut short
 
 The image ships `git`, `gh`, `kubectl`, `ripgrep` and `jq` next to the Claude CLI, so a
-prompt can clone, branch, push, merge, and then check what the cluster actually did with
-the result. `kubectl` authenticates as the pod's ServiceAccount — read-only in the
-manifests here, which is the right default for a GitOps cluster and for an app that runs
-arbitrary Claude sessions. Set `EXPOSE_KUBERNETES=false` to withhold cluster access
-entirely: `kubectl` builds its in-cluster config from `KUBERNETES_SERVICE_HOST`/`PORT`,
-so not forwarding those is what actually turns it off.
+prompt can clone, branch, push, merge, deploy the result and check that it came up.
+
+`kubectl` authenticates as the pod's ServiceAccount. The manifests in the companion repo
+grant read access to everything except Secrets, plus enough write access to take a change
+all the way to running: create ArgoCD Applications, and `rollout restart` a Deployment.
+Most changes still go through git — but two things git alone cannot do are registering a
+new app with ArgoCD, and redeploying when CI republishes a moving tag like `:latest` and
+the manifest is therefore unchanged.
+
+Set `EXPOSE_KUBERNETES=false` to withhold cluster access entirely: `kubectl` builds its
+in-cluster config from `KUBERNETES_SERVICE_HOST`/`PORT`, so not forwarding those is what
+actually turns it off.
 
 ---
 
