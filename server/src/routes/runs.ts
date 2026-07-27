@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { cancelRun, enqueueRun } from '../queue.js';
 import * as runStore from '../store/runs.js';
 import { getPrompt } from '../store/prompts.js';
-import { DEFAULT_RESUME_PROMPT } from '../scheduler.js';
+import { DEFAULT_RESUME_PROMPT, continuationTriggerType } from '../scheduler.js';
 import type { RunStatus } from '../types.js';
 
 const idParams = z.object({ id: z.string().min(1) });
@@ -113,7 +113,7 @@ export async function runRoutes(app: FastifyInstance): Promise<void> {
     const resumed = enqueueRun({
       promptId: run.promptId,
       triggerId: run.triggerId,
-      triggerType: `manual_resume:${run.triggerType}`,
+      triggerType: continuationTriggerType('manual_resume', run.triggerType),
       promptText: run.sessionId
         ? prompt.resumePrompt?.trim() || DEFAULT_RESUME_PROMPT
         : run.promptText,

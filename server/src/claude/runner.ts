@@ -391,19 +391,50 @@ export async function runOneShot(options: OneShotOptions): Promise<string | null
   }
 }
 
-/** Best-effort probe so the UI can tell the user the CLI is missing or unauthenticated. */
-export function claudeVersion(): Promise<string | null> {
-  return new Promise((resolve) => {
-    const child = spawn(config.claudeBin, ['--version'], {
-      env: { PATH: process.env.PATH ?? '', HOME: config.claudeHome },
-    });
+let versionCache: { value: string | null; at: number } | null = null;
+const VERSION_TTL_MS = 60_000;
+
+/**
+ * Best-effort probe so the UI can say the CLI is missing. Cached, bounded by a
+ * timeout, and with stdin closed — a wedged binary must not wedge /api/status.
+ */
+export async function claudeVersion(): Promise<string | null> {
+  if (versionCache && Date.now() - versionCache.at < VERSION_TTL_MS) return versionCache.value;
+
+  const value = await new Promise<string | null>((resolve) => {
+    let settled = false;
+    const done = (result: string | null) => {
+      if (settled) return;
+      settled = true;
+      resolve(result);
+    };
+
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawn(config.claudeBin, ['--version'], {
+        env: { PATH: process.env.PATH ?? '', HOME: config.claudeHome },
+        stdio: ['ignore', 'pipe', 'ignore'],
+      });
+    } catch {
+      done(null);
+      return;
+    }
+
     let out = '';
-    child.stdout.on('data', (chunk: Buffer) => {
-      out += chunk.toString('utf8');
+    child.stdout?.on('data', (chunk: Buffer) => {
+      if (out.length < 4096) out += chunk.toString('utf8');
     });
-    child.on('error', () => resolve(null));
-    child.on('close', (code) => resolve(code === 0 ? out.trim() : null));
+    child.on('error', () => done(null));
+    child.on('close', (code) => done(code === 0 ? out.trim() : null));
+
+    setTimeout(() => {
+      terminate(child);
+      done(null);
+    }, 5_000).unref();
   });
+
+  versionCache = { value, at: Date.now() };
+  return value;
 }
 
 export function ensureDirectories(): void {

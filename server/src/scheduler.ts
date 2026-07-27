@@ -9,6 +9,15 @@ import { listEnabledTriggers, markFired, updateTrigger } from './store/triggers.
 import { getActiveWindow, getQuotaState, windowDurationMs } from './store/usage.js';
 import type { Trigger, WindowKind } from './types.js';
 
+/**
+ * Label a continuation run without stacking prefixes: the third resume of a cron
+ * run is `auto_resume:cron`, not `auto_resume:auto_resume:cron`.
+ */
+export function continuationTriggerType(prefix: string, original: string): string {
+  const root = original.replace(/^(auto_resume|manual_resume|manual|follow_up):/, '');
+  return `${prefix}:${root}`;
+}
+
 export const DEFAULT_RESUME_PROMPT =
   'The previous run stopped because the Claude usage limit was reached. ' +
   'Continue the task from exactly where it left off, without redoing completed work.';
@@ -251,7 +260,7 @@ export function sweepAutoResumes(now: Date): void {
     const resumed = enqueueRun({
       promptId: prompt.id,
       triggerId: run.triggerId,
-      triggerType: `auto_resume:${run.triggerType}`,
+      triggerType: continuationTriggerType('auto_resume', run.triggerType),
       promptText: run.sessionId ? prompt.resumePrompt?.trim() || DEFAULT_RESUME_PROMPT : run.promptText,
       resumeOfRunId: run.id,
       resumeAttempt: run.resumeAttempt + 1,

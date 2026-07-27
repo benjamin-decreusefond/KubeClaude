@@ -177,6 +177,8 @@ test('hitting the quota parks the run and the sweep resumes its session', async 
   assert.equal(thread.length, 2);
   const resumed = thread[1]!;
   assert.equal(resumed.resumeOfRunId, limited.id);
+  // The label names the original trigger once, however many resumes deep it is.
+  assert.equal(resumed.triggerType, 'auto_resume:cron');
   assert.equal(resumed.rootRunId, limited.rootRunId);
   assert.equal(resumed.resumeAttempt, 1);
   assert.equal(runStore.getRun(limited.id)!.autoResumePending, false);

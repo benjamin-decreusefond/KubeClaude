@@ -3,6 +3,12 @@
 // tested without network access or a real token.
 import fs from 'node:fs';
 
+// `claude --version` exits without reading stdin; mirror that so the probe works.
+if (process.argv.includes('--version')) {
+  process.stdout.write('9.9.9 (fake-claude)\n');
+  process.exit(0);
+}
+
 const mode = process.env.FAKE_CLAUDE_MODE ?? 'success';
 const sessionId = process.env.FAKE_SESSION_ID ?? 'session-abc';
 const recordTo = process.env.FAKE_CLAUDE_RECORD;
