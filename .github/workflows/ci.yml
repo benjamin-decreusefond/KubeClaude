@@ -53,7 +53,7 @@ jobs:
           # Only publish from main; pull requests just prove the image builds.
           push: ${{ github.event_name == 'push' }}
           tags: |
-            ghcr.io/paganim/kubeclaude:latest
-            ghcr.io/paganim/kubeclaude:${{ github.sha }}
+            paganim/kubeclaude:latest
+            paganim/kubeclaude:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
