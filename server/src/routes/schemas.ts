@@ -106,6 +106,8 @@ export const settingsUpdateSchema = z.object({
   sessionTokenBudget: z.number().int().min(0).optional(),
   weeklyTokenBudget: z.number().int().min(0).optional(),
   budgetBasis: z.enum(['weighted', 'input_output', 'total']).optional(),
+  defaultMaxTurns: z.number().int().min(0).max(1000).optional(),
+  runTokenCap: z.number().int().min(0).optional(),
   quotaGuardEnabled: z.boolean().optional(),
   quotaReservePct: z.number().min(0).max(90).optional(),
   defaultModel: z.string().max(120).nullable().optional(),

@@ -256,6 +256,40 @@ export function SettingsPage() {
           hint="Held runs are parked and resumed when the window rolls over, rather than failing. Needs a budget above."
         />
 
+        <div className="grid-2">
+          <Field
+            label="Default turn cap"
+            hint={
+              draft.defaultMaxTurns > 0
+                ? `Prompts that do not set their own stop after ${draft.defaultMaxTurns} turns. Every turn re-sends the whole conversation, so this is what stops a looping run from eating a window.`
+                : 'Off — a prompt with no cap of its own can run as long as it likes. A prompt can always set 0 to opt out individually.'
+            }
+          >
+            <input
+              type="number"
+              min={0}
+              value={draft.defaultMaxTurns}
+              onChange={(event) => patch({ defaultMaxTurns: Number(event.target.value) })}
+            />
+          </Field>
+          <Field
+            label="Per-run token ceiling"
+            hint={
+              draft.runTokenCap > 0
+                ? `A run is killed on the turn it passes ${formatTokens(draft.runTokenCap)}, counted the same way as the budgets above. Its spend is still recorded, and it is never auto-resumed.`
+                : 'Off. Set one to stop a single run from spending a whole window — it kills the run mid-task, so it is deliberately opt-in.'
+            }
+          >
+            <input
+              type="number"
+              min={0}
+              step={10000}
+              value={draft.runTokenCap}
+              onChange={(event) => patch({ runTokenCap: Number(event.target.value) })}
+            />
+          </Field>
+        </div>
+
         <Field
           label="Keep in reserve (%)"
           hint="Share of each budget the guard refuses to spend, so an interactive session still has room."

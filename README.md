@@ -330,6 +330,41 @@ the raw counters become spend:
 Run history keeps the raw counters either way; only the gauge and the quota guard read
 the basis.
 
+## Spending less
+
+KubeClaude does not control tokenization, prompt caching or compaction — the CLI owns
+all three. What a wrapper controls is **how much conversation happens** and **what sits
+in the cached prefix**, and that is where the money is. Four levers, most useful first.
+
+**Cap the turns.** Every turn re-sends the whole conversation, so spend grows
+superlinearly with turn count and a run that goes in circles can eat a window by itself.
+`defaultMaxTurns` (30 out of the box) applies to any prompt that does not pin its own.
+A prompt setting `0` opts out deliberately; leaving it empty inherits the default.
+
+**Set a per-run ceiling.** `runTokenCap` kills a run on the turn it crosses the limit,
+weighed by the same `budgetBasis` as the gauges so the number means one thing everywhere.
+Spend up to that point is still charged to the window — a killed run reports the usage it
+streamed, not nothing — and the run is never auto-resumed, because retrying would spend
+the ceiling again for the same result. Off by default: it stops a run mid-task, so it is
+a deliberate choice rather than a surprise.
+
+**Shrink the tool list.** Every tool Claude can reach carries its schema in the system
+prompt of *every request*, so an unused WebFetch is a tax on each turn of each run. The
+prompt editor offers presets — cluster inspection, repository work, research, everything
+— that fill the allow and deny lists; edit them afterwards as you like.
+
+**Leave the prefix alone.** The environment briefing is about a thousand tokens on every
+run, re-read from cache at a tenth the price of fresh input. Editing it invalidates that
+cached prefix for every prompt at once, and each next run pays a full cache write at
+1.25×. Same for a prompt's CLAUDE.md. This is a reason not to fiddle, not a reason to
+trim.
+
+Session continuity is the quiet one. `continueSession` makes each run resume the last,
+which means the context grows forever and every turn of every future run pays to re-read
+it. It is off by default, and the prompt editor shows what the last run actually carried
+so the cost is visible before it hurts. Auto-resume is different and fine: it finishes
+one task rather than accreting a month of them.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

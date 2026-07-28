@@ -143,6 +143,9 @@ async function execute(run: Run): Promise<void> {
       globalEnv: settings.globalEnv,
       defaultModel: settings.defaultModel,
       environmentBriefing: settings.environmentBriefing,
+      defaultMaxTurns: settings.defaultMaxTurns,
+      runTokenCap: settings.runTokenCap,
+      budgetBasis: settings.budgetBasis,
       appendSystemPrompt:
         prompt.completionCheck === 'marker' ? markerInstruction(markerFor(prompt)) : undefined,
       signal: controller.signal,
@@ -184,6 +187,20 @@ async function execute(run: Run): Promise<void> {
 
     if (result.cancelled) {
       runs.updateRun(run.id, { ...common, status: 'cancelled', error: 'Cancelled' });
+    } else if (result.tokenCapExceeded) {
+      // Terminal on purpose. Resuming would restart the same work against the
+      // same ceiling and spend the budget twice for the same result, so this is
+      // marked finished-not-completed and left for a human to widen or narrow.
+      runs.updateRun(run.id, {
+        ...common,
+        status: 'failed',
+        error:
+          `Stopped at the per-run ceiling of ${settings.runTokenCap} tokens ` +
+          `(${result.weighedTokens} spent). Raise it in Settings or narrow the prompt.`,
+        completed: false,
+        completionReason: 'token-cap',
+        autoResumePending: false,
+      });
     } else if (result.timedOut) {
       runs.updateRun(run.id, {
         ...common,

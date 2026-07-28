@@ -8,6 +8,8 @@ export const DEFAULT_SETTINGS: Settings = {
   sessionTokenBudget: 0,
   weeklyTokenBudget: 0,
   budgetBasis: 'weighted',
+  defaultMaxTurns: 30,
+  runTokenCap: 0,
   quotaGuardEnabled: false,
   quotaReservePct: 0,
   defaultModel: null,

@@ -6,7 +6,7 @@ import { Badge, Banner, Card, Checkbox, Field, StatusBadge } from '../components
 import { formatRelative, formatTokens, triggerLabel } from '../format';
 import { usePolled } from '../hooks';
 import { TriggerList } from './TriggerEditor';
-import type { Capabilities, McpServer, ModelOption, Prompt, Settings } from '../types';
+import type { Capabilities, McpServer, ModelOption, Prompt, Settings, ToolPreset } from '../types';
 
 // This editor only ever handles scheduled prompts; chats are edited by talking
 // to them, so kind and title are not part of the form.
@@ -65,6 +65,7 @@ export function PromptEditor() {
   const { data: mcpServers } = usePolled<McpServer[]>(() => api.mcpServers(), 0);
   const { data: capabilities } = usePolled<Capabilities>(() => api.capabilities(), 0);
   const { data: settings } = usePolled<Settings>(() => api.settings(), 0);
+  const { data: presetData } = usePolled<{ presets: ToolPreset[] }>(() => api.toolPresets(), 0);
 
   useEffect(() => {
     if (!existing) return;
@@ -86,6 +87,14 @@ export function PromptEditor() {
   const patch = (next: Partial<Draft>) => setDraft((current) => ({ ...current, ...next }));
 
   const models = modelData?.models ?? [];
+  const presets = presetData?.presets ?? [];
+  const defaultMaxTurns = settings?.defaultMaxTurns ?? 0;
+  // What the previous run had to re-read before it could do anything new. The
+  // cached prefix is the honest measure of how heavy a continued session got.
+  const lastRun = existing?.lastRun;
+  const contextTokens = lastRun
+    ? lastRun.cacheReadTokens + lastRun.cacheCreationTokens + lastRun.inputTokens
+    : 0;
   const knownModel = useMemo(
     () => models.some((model) => model.id === (draft.model ?? '')),
     [models, draft.model],
@@ -273,6 +282,31 @@ export function PromptEditor() {
                 <option value="plan">plan — research only, no changes</option>
                 <option value="acceptEdits">acceptEdits — auto-approve file edits</option>
                 <option value="bypassPermissions">bypassPermissions — no prompts at all</option>
+              </select>
+            </Field>
+
+            <Field
+              label="Start from a preset"
+              hint="Every tool Claude can reach carries its schema in the system prompt of every request, so a shorter list is cheaper on every turn. Picking one fills the lists below; edit them freely afterwards."
+            >
+              <select
+                value=""
+                onChange={(event) => {
+                  const preset = presets.find((entry) => entry.id === event.target.value);
+                  if (preset) {
+                    patch({
+                      allowedTools: preset.allowedTools,
+                      disallowedTools: preset.disallowedTools,
+                    });
+                  }
+                }}
+              >
+                <option value="">Choose a preset…</option>
+                {presets.map((preset) => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.label} — {preset.description}
+                  </option>
+                ))}
               </select>
             </Field>
 
@@ -522,6 +556,20 @@ export function PromptEditor() {
               label="Every scheduled run continues the previous session"
               hint="Off by default: each run starts clean. Turn it on for a long-running task that should accumulate context across runs — it grows the context, and the cost, over time."
             />
+            {draft.continueSession &&
+              contextTokens > 0 &&
+              (contextTokens > 200_000 ? (
+                <Banner tone="warning">
+                  The last run read <strong>{formatTokens(contextTokens)}</strong> of accumulated
+                  context before doing any new work, and every turn of the next run pays for that
+                  again. Start a fresh session when the task no longer needs the history.
+                </Banner>
+              ) : (
+                <p className="stat-note">
+                  The last run carried {formatTokens(contextTokens)} of context. Every turn re-reads
+                  it, so this is the floor on what the next run costs.
+                </p>
+              ))}
             {existing?.lastSessionId && (
               <p className="stat-note">
                 Last session: <code>{existing.lastSessionId}</code>
@@ -542,10 +590,17 @@ export function PromptEditor() {
                 onChange={(event) => patch({ timeoutSeconds: Number(event.target.value) })}
               />
             </Field>
-            <Field label="Maximum turns" hint="Empty for no limit.">
+            <Field
+              label="Maximum turns"
+              hint={
+                defaultMaxTurns > 0
+                  ? `Empty inherits the global default of ${defaultMaxTurns}. Set 0 to run uncapped.`
+                  : 'Empty means no limit, because the global default is switched off.'
+              }
+            >
               <input
                 type="number"
-                min={1}
+                min={0}
                 value={draft.maxTurns ?? ''}
                 onChange={(event) => patch({ maxTurns: event.target.value ? Number(event.target.value) : null })}
               />

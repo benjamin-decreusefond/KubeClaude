@@ -14,6 +14,7 @@ import type {
   Trigger,
   TriggerConfig,
   TriggerType,
+  ToolPreset,
   UsageWindow,
 } from './types';
 
@@ -66,6 +67,7 @@ export const api = {
   status: () => request<Status>('/api/status'),
   capabilities: () => request<Capabilities>('/api/capabilities'),
   models: () => request<{ models: ModelOption[] }>('/api/models'),
+  toolPresets: () => request<{ presets: ToolPreset[] }>('/api/tool-presets'),
   dashboard: () => request<Dashboard>('/api/dashboard'),
   usage: () =>
     request<{ sessionWindows: UsageWindow[]; weeklyWindows: UsageWindow[] }>('/api/usage'),

@@ -200,6 +200,18 @@ export interface Settings {
   weeklyTokenBudget: number;
   /** How raw token counts are converted into budget spend. */
   budgetBasis: BudgetBasis;
+  /**
+   * Turn cap applied to any prompt that does not set its own. Spend grows
+   * superlinearly with turns — every turn re-sends the whole prefix — so an
+   * uncapped run that goes in circles can eat a window on its own. 0 disables.
+   */
+  defaultMaxTurns: number;
+  /**
+   * Hard ceiling on what one run may spend, weighed by `budgetBasis`. The run is
+   * killed on the turn that crosses it. 0 disables, which is the default: this
+   * stops a run mid-task, so it is a deliberate choice rather than a surprise.
+   */
+  runTokenCap: number;
   /** Refuse to start runs once a budget is exhausted. */
   quotaGuardEnabled: boolean;
   /** Keep this share (0-100) of each budget unspent when the guard is on. */

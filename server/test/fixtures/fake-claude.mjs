@@ -79,6 +79,28 @@ process.stdin.on('end', () => {
     return;
   }
 
+  if (mode === 'burn') {
+    // Spends steadily and never finishes, so only the token ceiling can stop it.
+    // Each turn reports its own usage, which is how a real run streams cost.
+    const perTurn = Number(process.env.FAKE_BURN_PER_TURN ?? 10_000);
+    const timer = setInterval(() => {
+      emit({
+        type: 'assistant',
+        session_id: sessionId,
+        message: {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'still going' }],
+          usage: { input_tokens: perTurn, output_tokens: 0, cache_read_input_tokens: 0 },
+        },
+      });
+    }, 20);
+    process.on('SIGTERM', () => {
+      clearInterval(timer);
+      process.exit(0);
+    });
+    return;
+  }
+
   emit({
     type: 'result',
     subtype: 'success',

@@ -3,6 +3,7 @@ import { promisify } from 'node:util';
 import type { FastifyInstance } from 'fastify';
 import { claudeVersion } from '../claude/runner.js';
 import { MODEL_CATALOG } from '../claude/models.js';
+import { TOOL_PRESETS } from '../claude/tool-presets.js';
 import {
   billingMode,
   claudeCredentials,
@@ -57,6 +58,8 @@ export async function systemRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get('/api/models', async () => ({ models: MODEL_CATALOG }));
+
+  app.get('/api/tool-presets', async () => ({ presets: TOOL_PRESETS }));
 
   /**
    * What a run can actually reach: which CLIs are on PATH and which pod env vars
