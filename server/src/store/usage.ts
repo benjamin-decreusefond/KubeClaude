@@ -124,22 +124,43 @@ export function addUsage(windowId: string, totals: UsageTotals): void {
 export const CACHE_READ_WEIGHT = 0.1;
 export const CACHE_WRITE_WEIGHT = 1.25;
 
-/** Tokens counted against the budget, per the configured basis. */
-export function budgetedTokens(window: UsageWindow, basis: BudgetBasis): number {
+/** The four raw counters, shared by usage windows, run totals and live turns. */
+export interface TokenParts {
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
+}
+
+/**
+ * Tokens counted against a budget, per the configured basis. Lives here rather
+ * than beside the gauge because the per-run ceiling has to weigh a run's spend
+ * the same way the window gauge weighs it — otherwise a cap of N would mean two
+ * different things depending on where you read it.
+ */
+export function weighTokens(parts: TokenParts, basis: BudgetBasis): number {
   switch (basis) {
     case 'total':
-      return window.totalTokens;
+      return (
+        parts.inputTokens + parts.outputTokens + parts.cacheCreationTokens + parts.cacheReadTokens
+      );
     case 'input_output':
-      return window.inputTokens + window.outputTokens;
+      return parts.inputTokens + parts.outputTokens;
     case 'weighted':
     default:
       return Math.round(
-        window.inputTokens +
-          window.outputTokens +
-          window.cacheCreationTokens * CACHE_WRITE_WEIGHT +
-          window.cacheReadTokens * CACHE_READ_WEIGHT,
+        parts.inputTokens +
+          parts.outputTokens +
+          parts.cacheCreationTokens * CACHE_WRITE_WEIGHT +
+          parts.cacheReadTokens * CACHE_READ_WEIGHT,
       );
   }
+}
+
+export function budgetedTokens(window: UsageWindow, basis: BudgetBasis): number {
+  // `total` reads the stored column rather than re-adding the parts, so a window
+  // whose totals were written directly still reports what it was given.
+  return basis === 'total' ? window.totalTokens : weighTokens(window, basis);
 }
 
 export interface QuotaSlice {

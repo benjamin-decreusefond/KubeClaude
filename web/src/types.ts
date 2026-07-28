@@ -172,6 +172,8 @@ export interface Settings {
   sessionTokenBudget: number;
   weeklyTokenBudget: number;
   budgetBasis: BudgetBasis;
+  defaultMaxTurns: number;
+  runTokenCap: number;
   quotaGuardEnabled: boolean;
   quotaReservePct: number;
   defaultModel: string | null;
@@ -300,6 +302,14 @@ export interface StartChatInput {
   mcpServerIds?: string[];
   env?: Record<string, string>;
   fromPromptId?: string;
+}
+
+export interface ToolPreset {
+  id: string;
+  label: string;
+  description: string;
+  allowedTools: string[];
+  disallowedTools: string[];
 }
 
 export interface ModelOption {

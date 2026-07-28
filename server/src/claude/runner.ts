@@ -5,7 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { claudeCredentials, config, forwardedEnvPrefixes } from '../config.js';
 import { buildMcpDocument } from '../store/mcp.js';
-import type { ModelUsage, Prompt, UsageTotals } from '../types.js';
+import { weighTokens } from '../store/usage.js';
+import type { BudgetBasis, ModelUsage, Prompt, UsageTotals } from '../types.js';
 
 export interface RunnerOptions {
   prompt: Prompt;
@@ -22,6 +23,11 @@ export interface RunnerOptions {
   extraEnv?: Record<string, string>;
   globalEnv?: Record<string, string>;
   defaultModel?: string | null;
+  /** Turn cap for a prompt that does not pin its own; 0 means uncapped. */
+  defaultMaxTurns?: number;
+  /** Kill the run once it has spent this much, weighed by `budgetBasis`; 0 disables. */
+  runTokenCap?: number;
+  budgetBasis?: BudgetBasis;
   onEvent: (kind: 'message' | 'stderr' | 'system', payload: unknown) => void;
   signal?: AbortSignal;
 }
@@ -42,6 +48,10 @@ export interface RunnerResult {
   stderr: string;
   timedOut: boolean;
   cancelled: boolean;
+  /** True when the run was killed for crossing the per-run token ceiling. */
+  tokenCapExceeded: boolean;
+  /** Spend at the moment it was stopped, weighed by the configured basis. */
+  weighedTokens: number;
 }
 
 const EMPTY_USAGE: UsageTotals = {
@@ -143,7 +153,11 @@ async function prepare(options: RunnerOptions): Promise<PreparedInvocation> {
   if (prompt.permissionMode && prompt.permissionMode !== 'default') {
     args.push('--permission-mode', prompt.permissionMode);
   }
-  if (prompt.maxTurns && prompt.maxTurns > 0) args.push('--max-turns', String(prompt.maxTurns));
+  // A prompt that pins its own turn cap wins, including an explicit 0 meaning
+  // "no cap on purpose". Only a null falls through to the global default, which
+  // is what stops an unattended run from looping until the window is gone.
+  const maxTurns = prompt.maxTurns ?? options.defaultMaxTurns ?? 0;
+  if (maxTurns > 0) args.push('--max-turns', String(maxTurns));
 
   // Shared MCP connections plus any inline config, written as one .mcp.json.
   // The servers themselves live elsewhere; this only tells Claude how to reach them.
@@ -296,6 +310,44 @@ export async function runClaude(options: RunnerOptions): Promise<RunnerResult> {
   let stderr = '';
   let timedOut = false;
   let cancelled = false;
+  let tokenCapExceeded = false;
+
+  // Running total assembled from each turn's own usage. The `result` message is
+  // authoritative once it arrives, but it only arrives if the run finishes — so
+  // this is both the ceiling's input and the accounting fallback for a run we
+  // killed before it could report.
+  const live: UsageTotals = { ...EMPTY_USAGE };
+  const basis = options.budgetBasis ?? 'weighted';
+  const cap = options.runTokenCap ?? 0;
+
+  const onTurnUsage = (raw: unknown) => {
+    if (!raw || typeof raw !== 'object') return;
+    const usageRecord = raw as Record<string, unknown>;
+    live.inputTokens += num(usageRecord.input_tokens);
+    live.outputTokens += num(usageRecord.output_tokens);
+    live.cacheCreationTokens += num(usageRecord.cache_creation_input_tokens);
+    live.cacheReadTokens += num(usageRecord.cache_read_input_tokens);
+    live.totalTokens =
+      live.inputTokens + live.outputTokens + live.cacheCreationTokens + live.cacheReadTokens;
+
+    if (cap <= 0 || tokenCapExceeded) return;
+    const weighed = weighTokens(live, basis);
+    if (weighed < cap) return;
+
+    tokenCapExceeded = true;
+    options.onEvent('system', {
+      kind: 'token-cap-exceeded',
+      cap,
+      basis,
+      weighedTokens: weighed,
+      rawTokens: live.totalTokens,
+      message:
+        `This run crossed the per-run ceiling of ${cap} tokens (${weighed} spent, weighed as ` +
+        `"${basis}") and was stopped. Raise the ceiling in Settings, narrow the prompt, or cap ` +
+        'its turns if it is looping.',
+    });
+    terminate(child);
+  };
 
   const onStdoutLine = (line: string) => {
     let message: unknown;
@@ -311,6 +363,12 @@ export async function runClaude(options: RunnerOptions): Promise<RunnerResult> {
     if (typeof record.session_id === 'string') sessionId = record.session_id;
     if (record.type === 'system' && record.subtype === 'init' && typeof record.model === 'string') {
       model = record.model;
+    }
+    if (record.type === 'assistant') {
+      // Each assistant message carries the usage of the API call that produced
+      // it, so summing them tracks spend as it happens rather than after.
+      const inner = record.message as Record<string, unknown> | undefined;
+      onTurnUsage(inner?.usage ?? record.usage);
     }
     if (record.type === 'result') {
       isError = record.is_error === true;
@@ -360,15 +418,22 @@ export async function runClaude(options: RunnerOptions): Promise<RunnerResult> {
       },
     );
 
+    // A run we killed — on the ceiling, the timeout or a cancel — never emits a
+    // `result`, so its spend would otherwise vanish from the quota windows. The
+    // turn-by-turn total is the only record of what it actually cost.
+    const finalUsage = usage.totalTokens > 0 ? usage : live;
+
     return {
       exitCode: code,
       signal,
       sessionId,
       resultText,
-      isError: isError || (code !== 0 && code !== null),
+      isError: isError || tokenCapExceeded || (code !== 0 && code !== null),
       subtype,
       numTurns,
-      usage,
+      usage: finalUsage,
+      tokenCapExceeded,
+      weighedTokens: weighTokens(finalUsage, basis),
       model,
       modelUsage,
       durationApiMs,
