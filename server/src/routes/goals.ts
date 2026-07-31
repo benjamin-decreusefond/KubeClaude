@@ -59,7 +59,7 @@ function promptPatchFrom(input: Record<string, unknown>): Partial<Prompt> {
   for (const field of PROMPT_FIELDS) {
     if (input[field] !== undefined) patch[field] = input[field];
   }
-  return patch as Partial<Prompt>;
+  return patch;
 }
 
 export async function goalRoutes(app: FastifyInstance): Promise<void> {
@@ -171,7 +171,7 @@ export async function goalRoutes(app: FastifyInstance): Promise<void> {
       updated = goalStore.updateGoal(id, { status: 'achieved' })!;
     }
 
-    const promptPatch = promptPatchFrom(input as Record<string, unknown>);
+    const promptPatch = promptPatchFrom(input);
     if (input.keepSession !== undefined) promptPatch.continueSession = input.keepSession;
     if (input.name !== undefined) promptPatch.title = input.name;
     if (Object.keys(promptPatch).length > 0) {

@@ -4,7 +4,6 @@ import { cancelRun, enqueueRun } from '../queue.js';
 import * as runStore from '../store/runs.js';
 import { getPrompt } from '../store/prompts.js';
 import { DEFAULT_RESUME_PROMPT, continuationTriggerType } from '../scheduler.js';
-import type { RunStatus } from '../types.js';
 
 const idParams = z.object({ id: z.string().min(1) });
 
@@ -25,8 +24,8 @@ export async function runRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) return reply.code(400).send({ error: 'Invalid query' });
     const { promptId, status, limit, offset } = parsed.data;
     return {
-      items: runStore.listRuns({ promptId, status: status as RunStatus | undefined, limit, offset }),
-      total: runStore.countRuns({ promptId, status: status as RunStatus | undefined }),
+      items: runStore.listRuns({ promptId, status: status, limit, offset }),
+      total: runStore.countRuns({ promptId, status: status }),
     };
   });
 

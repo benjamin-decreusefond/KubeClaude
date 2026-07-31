@@ -74,20 +74,16 @@ export function TriggerList({
                   <button
                     className="ghost small"
                     type="button"
-                    onClick={async () => {
-                      await api.updateTrigger(trigger.id, { enabled: !trigger.enabled });
-                      onChange();
-                    }}
+                    onClick={() =>
+                      void api.updateTrigger(trigger.id, { enabled: !trigger.enabled }).then(onChange)
+                    }
                   >
                     {trigger.enabled ? 'Pause' : 'Resume'}
                   </button>
                   <button
                     className="ghost small"
                     type="button"
-                    onClick={async () => {
-                      await api.deleteTrigger(trigger.id);
-                      onChange();
-                    }}
+                    onClick={() => void api.deleteTrigger(trigger.id).then(onChange)}
                   >
                     ✕
                   </button>

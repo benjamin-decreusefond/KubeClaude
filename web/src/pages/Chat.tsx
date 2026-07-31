@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { ChatTranscript } from '../components/ChatTranscript';
 import { Banner, Modal, Field } from '../components/primitives';
@@ -89,6 +89,17 @@ export function Chat() {
     }
   }, [chat?.busy, queued, send]);
 
+  const stop = async () => {
+    await api.stopChat(chat!.id).catch(() => undefined);
+    await load();
+  };
+
+  const remove = async () => {
+    if (!confirm('Delete this conversation?')) return;
+    await api.deleteChat(chat!.id);
+    navigate('/chats');
+  };
+
   const submit = () => {
     const text = draft.trim();
     if (!text) return;
@@ -126,27 +137,14 @@ export function Chat() {
         </div>
         <div className="row">
           {chat.busy && (
-            <button
-              className="danger small"
-              onClick={async () => {
-                await api.stopChat(chat.id).catch(() => undefined);
-                void load();
-              }}
-            >
+            <button className="danger small" onClick={() => void stop()}>
               Stop
             </button>
           )}
           <button className="ghost small" onClick={() => setPromoting(true)}>
             Save as prompt
           </button>
-          <button
-            className="ghost small"
-            onClick={async () => {
-              if (!confirm('Delete this conversation?')) return;
-              await api.deleteChat(chat.id);
-              navigate('/chats');
-            }}
-          >
+          <button className="ghost small" onClick={() => void remove()}>
             Delete
           </button>
         </div>
@@ -199,6 +197,19 @@ function PromoteModal({ chat, onClose }: { chat: ChatDetail; onClose: () => void
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  const promote = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const created = await api.promoteChat(chat.id, name.trim(), prompt.trim());
+      navigate(`/prompts/${created.id}`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <Modal
       title="Save as a scheduled prompt"
@@ -211,18 +222,7 @@ function PromoteModal({ chat, onClose }: { chat: ChatDetail; onClose: () => void
           <button
             className="primary"
             disabled={saving || !name.trim() || !prompt.trim()}
-            onClick={async () => {
-              setSaving(true);
-              setError(null);
-              try {
-                const created = await api.promoteChat(chat.id, name.trim(), prompt.trim());
-                navigate(`/prompts/${created.id}`);
-              } catch (cause) {
-                setError(cause instanceof Error ? cause.message : String(cause));
-              } finally {
-                setSaving(false);
-              }
-            }}
+            onClick={() => void promote()}
           >
             {saving ? 'Saving…' : 'Create prompt'}
           </button>

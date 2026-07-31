@@ -86,7 +86,7 @@ const TRIGGER_LABELS: Record<string, string> = {
 };
 
 export function triggerLabel(type: string): string {
-  if (TRIGGER_LABELS[type]) return TRIGGER_LABELS[type]!;
+  if (TRIGGER_LABELS[type]) return TRIGGER_LABELS[type];
   if (type.startsWith('auto_resume:')) return 'Auto-resume';
   if (type.startsWith('manual_resume:')) return 'Manual resume';
   if (type.startsWith('manual:')) return 'Manual';

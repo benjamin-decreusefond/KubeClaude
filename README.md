@@ -383,18 +383,26 @@ back that up and you have backed up KubeClaude.
 ### Development
 
 ```bash
-npm run verify    # typecheck + tests + build: the single gate
+npm run verify    # lint + typecheck + tests + build: the single gate
 npm run e2e       # the browser pass, after a build
 ```
 
 Or one layer at a time:
 
 ```bash
+npm run lint                 # eslint, type-aware, zero warnings tolerated
+npm run lint:fix             # the mechanical half of it
 npm run typecheck            # server, web and the e2e specs
 npm run test:server          # queue, scheduler, stores, and the HTTP API
 npm run test:web             # components, in jsdom
 npm run build
 ```
+
+**Linting** is type-aware, which is the point: it is what catches a floating
+promise in the queue — a run that silently never finishes — or a value off the
+CLI's JSON stream rendered as `[object Object]`. It has no opinion about quotes
+or line width; there is no formatter here, and the rules are chosen for what
+they catch rather than for how they look.
 
 **Three layers, and what each one is for.**
 

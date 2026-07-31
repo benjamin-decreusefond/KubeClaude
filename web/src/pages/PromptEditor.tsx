@@ -82,11 +82,17 @@ export function PromptEditor() {
       ...rest
     } = existing;
     setDraft(rest);
+    // Deliberately keyed on identity rather than on `existing` itself: the
+    // prompt is polled, and depending on the object would throw away whatever
+    // the person is in the middle of typing on every refresh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existing?.id, existing?.updatedAt]);
 
   const patch = (next: Partial<Draft>) => setDraft((current) => ({ ...current, ...next }));
 
-  const models = modelData?.models ?? [];
+  // Memoised because a fresh [] on every render would re-run everything that
+  // depends on it.
+  const models = useMemo(() => modelData?.models ?? [], [modelData]);
   const presets = presetData?.presets ?? [];
   const defaultMaxTurns = settings?.defaultMaxTurns ?? 0;
   // What the previous run had to re-read before it could do anything new. The
@@ -109,7 +115,7 @@ export function PromptEditor() {
         navigate(`/prompts/${created.id}`, { replace: true });
         setMessage('Prompt created');
       } else {
-        await api.updatePrompt(id!, draft);
+        await api.updatePrompt(id, draft);
         refresh();
         setMessage('Saved');
       }
@@ -428,7 +434,7 @@ export function PromptEditor() {
             </Card>
           ) : (
             <TriggerList
-              promptId={id!}
+              promptId={id}
               triggers={existing?.triggers ?? []}
               timezone={settings?.timezone ?? 'UTC'}
               onChange={refresh}

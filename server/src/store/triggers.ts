@@ -99,7 +99,7 @@ export function updateTrigger(id: string, patch: Partial<Trigger>): Trigger | nu
     assignments.push(`${column} = ?`);
     if (field === 'config') values.push(JSON.stringify(value));
     else if (field === 'enabled') values.push(boolToDb(Boolean(value)));
-    else values.push(value as never);
+    else values.push(value);
   }
 
   if (assignments.length === 0) return getTrigger(id);

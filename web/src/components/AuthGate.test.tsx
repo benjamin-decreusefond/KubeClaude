@@ -65,11 +65,11 @@ describe('first run', () => {
     renderGate();
     await screen.findByText('Set a password');
 
-    const button = screen.getByRole('button', { name: 'Set password' }) as HTMLButtonElement;
+    const button = screen.getByRole<HTMLButtonElement>('button', { name: 'Set password' });
     expect(button.disabled).toBe(true);
 
-    const password = screen.getByLabelText('Password') as HTMLInputElement;
-    const confirm = screen.getByLabelText('Confirm password') as HTMLInputElement;
+    const password = screen.getByLabelText<HTMLInputElement>('Password');
+    const confirm = screen.getByLabelText<HTMLInputElement>('Confirm password');
 
     await userEvent.type(password, 'short');
     expect(await screen.findByText('Too short — at least 8 characters.')).toBeDefined();

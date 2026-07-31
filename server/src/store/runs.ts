@@ -242,7 +242,7 @@ export function updateRun(id: string, patch: Partial<Run>): Run | null {
     if (field === 'autoResumePending') values.push(boolToDb(Boolean(value)));
     else if (field === 'completed') values.push(value === null ? null : boolToDb(Boolean(value)));
     else if (field === 'modelUsage') values.push(value === null ? null : JSON.stringify(value));
-    else values.push(value as never);
+    else values.push(value);
   }
   if (assignments.length === 0) return getRun(id);
   values.push(id);
