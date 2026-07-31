@@ -63,6 +63,8 @@ export function App({ auth, onAuthChanged }: { auth: AuthState; onAuthChanged: (
         <div className="sidebar-foot">
           {status && (
             <div>
+              {/* Which build is running — the first question after a deploy. */}
+              <div title="The image this instance is running">KubeClaude {status.version}</div>
               <div>Claude CLI {status.claudeVersion ?? 'not found'}</div>
               <div>
                 {status.activeRuns}/{status.maxConcurrentRuns} running

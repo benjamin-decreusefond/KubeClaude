@@ -156,6 +156,23 @@ test('external auth trusts the proxy header, and only that', async () => {
   assert.equal((await authenticate(request())).allowed, true);
 });
 
+test('a session still works after switching to proxy authentication', async () => {
+  await authStore.setPassword('a-good-password');
+  const token = randomToken();
+  authStore.createSession(token, 30, null);
+
+  // Whoever flips this switch is holding a session this instance issued after a
+  // password. Refusing it would lock them out between the click and the next
+  // request, before they could see whether the proxy header even arrives.
+  authStore.updateAuthConfig({ method: 'external', externalUserHeader: 'X-Forwarded-User' });
+  const outcome = await authenticate(request({ headers: { cookie: `kubeclaude_session=${token}` } }));
+  assert.equal(outcome.allowed, true);
+  assert.equal(outcome.via, 'session');
+
+  // A stranger without the header is still refused.
+  assert.equal((await authenticate(request())).allowed, false);
+});
+
 test('with no auth, everything is allowed', async () => {
   authStore.updateAuthConfig({ method: 'none' });
   const outcome = await authenticate(request());

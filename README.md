@@ -383,13 +383,49 @@ back that up and you have backed up KubeClaude.
 ### Development
 
 ```bash
-npm run typecheck
-npm test          # unit tests plus a full run lifecycle against a stub CLI
+npm run verify    # typecheck + tests + build: the single gate
+npm run e2e       # the browser pass, after a build
+```
+
+Or one layer at a time:
+
+```bash
+npm run typecheck            # server, web and the e2e specs
+npm run test:server          # queue, scheduler, stores, and the HTTP API
+npm run test:web             # components, in jsdom
 npm run build
 ```
 
-The tests drive the real queue, scheduler and runner against a stub `claude` binary, so
-the quota → park → resume → complete path is covered without a token or a network.
+**Three layers, and what each one is for.**
+
+| Layer | What it proves | Cost |
+|---|---|---|
+| `server/test/*.test.ts` | The queue, scheduler, goal loop and auth guard behave — driven against a stub `claude` binary, so the quota → park → resume → complete path is covered without a token or a network. `api.test.ts` goes through the real HTTP stack with `app.inject()`, so routes, schemas and the auth hook are covered too | ~30s |
+| `web/src/**/*.test.tsx` | Components render and their forms submit. Typechecking cannot see a screen that throws on an empty instance | ~2s |
+| `e2e/tests` | The built server, the built SPA and a real Chromium. Every page renders; a prompt is written, scheduled with a cron trigger, run, and read back; a goal is set, its objectives ticked, its progress log filled, paused and deleted; a chat is held; an MCP connection is stored and previewed; settings and every login method are exercised; signing out and back in works. Each test also fails on an uncaught page error, not just on its assertions | ~30s |
+
+The e2e run starts its own server on a throwaway database with the stub CLI and no
+credentials, so a full pass touches no cluster and spends no quota. That is deliberate:
+it has to be safe to run on every pull request, and from inside a KubeClaude that is
+working on this repository.
+
+**Which build am I running?** `/api/status` reports `version`, shown in the sidebar. CI
+stamps it with `main-<sha>`; a release tag stamps the version. On `dev` you are looking
+at a local build.
+
+### Releasing
+
+`latest` follows the tip of `main` — CI publishes it on every merge, once the tests and
+the browser pass are green. A deployment that should only move when you say so pins a
+version instead:
+
+```bash
+git tag v1.4.2 && git push origin v1.4.2
+```
+
+That runs the whole gate again, then publishes `1.4.2`, `1.4` and `1`, and opens a
+GitHub release. A pre-release (`v1.5.0-rc.1`) publishes only its exact version, so `:1`
+never starts pointing at a release candidate.
 
 ---
 

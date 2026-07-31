@@ -10,3 +10,8 @@ coverage/
 
 # TypeScript incremental build state
 *.tsbuildinfo
+
+# End-to-end runs: throwaway database, traces, screenshots.
+e2e/.tmp/
+e2e/test-results/
+e2e/playwright-report/

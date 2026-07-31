@@ -1,0 +1,136 @@
+name: Release
+
+# A release is a tag. Pushing `v1.4.2` publishes the image as 1.4.2, 1.4 and 1,
+# and makes that version the one a cluster can pin to.
+#
+# `latest` keeps meaning "the tip of main" and is published by CI on every merge.
+# A deployment that should only move when a human decides it moves pins a
+# version tag instead — which is the point of having them.
+
+# Installing the workspaces would otherwise fetch every Playwright browser in
+# every job. The one job that needs a browser installs Chromium explicitly.
+env:
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+', 'v[0-9]+.[0-9]+.[0-9]+-*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to (re)publish, e.g. v1.4.2'
+        required: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm install --no-audit --no-fund
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: e2e
+
+      # Typecheck, tests, build — then the browser pass. A tag is what a cluster
+      # will pin to, so nothing ships on a tag that has not been through both.
+      - name: Verify
+        run: npm run verify
+
+      - name: End-to-end
+        run: npm run e2e
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: release-e2e-results
+          path: e2e/test-results
+          retention-days: 14
+
+  publish:
+    runs-on: ubuntu-latest
+    needs: verify
+    permissions:
+      contents: write
+    env:
+      NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE || 'paganim' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Work out the version
+        id: version
+        run: |
+          raw="${{ github.event.inputs.tag || github.ref_name }}"
+          version="${raw#v}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "major=${version%%.*}" >> "$GITHUB_OUTPUT"
+          echo "minor=${version%.*}" >> "$GITHUB_OUTPUT"
+          # A pre-release (1.4.0-rc.1) must not move the floating tags that
+          # deployments follow.
+          if [[ "$version" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push the release
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          build-args: |
+            APP_VERSION=${{ steps.version.outputs.version }}
+          # X.Y.Z always; X.Y and X only for a final release, so `:1` never
+          # points at a release candidate.
+          tags: |
+            docker.io/${{ env.NAMESPACE }}/kubeclaude:${{ steps.version.outputs.version }}
+            ${{ steps.version.outputs.prerelease == 'false' && format('docker.io/{0}/kubeclaude:{1}', env.NAMESPACE, steps.version.outputs.minor) || '' }}
+            ${{ steps.version.outputs.prerelease == 'false' && format('docker.io/{0}/kubeclaude:{1}', env.NAMESPACE, steps.version.outputs.major) || '' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          VERSION: ${{ steps.version.outputs.version }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+          NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE || 'paganim' }}
+        run: |
+          notes=$(mktemp)
+          {
+            echo "## Image"
+            echo
+            echo '```'
+            echo "docker.io/$NAMESPACE/kubeclaude:$VERSION"
+            echo '```'
+            echo
+            echo "\`/api/status\` on a pod running this build reports \`$VERSION\`."
+          } > "$notes"
+
+          create=(--title "$VERSION" --notes-file "$notes" --generate-notes)
+          [ "$PRERELEASE" = "true" ] && create+=(--prerelease)
+
+          # Re-publishing an existing tag through workflow_dispatch is a normal
+          # thing to want; `edit` takes a narrower set of flags than `create`.
+          gh release create "$TAG" "${create[@]}" \
+            || gh release edit "$TAG" --title "$VERSION" --notes-file "$notes"

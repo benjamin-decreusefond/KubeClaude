@@ -6,7 +6,8 @@
   "license": "MIT",
   "workspaces": [
     "server",
-    "web"
+    "web",
+    "e2e"
   ],
   "engines": {
     "node": ">=22"
@@ -16,7 +17,11 @@
     "dev": "npm run dev --workspace server",
     "dev:web": "npm run dev --workspace web",
     "start": "node server/dist/index.js",
-    "typecheck": "npm run typecheck --workspace server && npm run typecheck --workspace web",
-    "test": "npm run test --workspace server"
+    "typecheck": "npm run typecheck --workspace server && npm run typecheck --workspace web && npm run typecheck --workspace e2e",
+    "test": "npm run test --workspace server && npm run test --workspace web",
+    "test:server": "npm run test --workspace server",
+    "test:web": "npm run test --workspace web",
+    "e2e": "npm run e2e --workspace e2e",
+    "verify": "npm run typecheck && npm test && npm run build"
   }
 }
