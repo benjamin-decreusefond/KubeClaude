@@ -1,5 +1,6 @@
 import { Cron } from 'croner';
 import { config } from './config.js';
+import { sweepGoals } from './goals.js';
 import { logger } from './logger.js';
 import { enqueueRun, drain } from './queue.js';
 import * as runs from './store/runs.js';
@@ -42,6 +43,9 @@ export function stopScheduler(): void {
 export async function tick(now: Date = new Date()): Promise<void> {
   evaluateTriggers(now);
   sweepAutoResumes(now);
+  // After the resume sweep: a goal iteration that the quota interrupted belongs
+  // to auto-resume first, and the goal loop only decides once that has settled.
+  await sweepGoals(now);
   await drain();
 }
 

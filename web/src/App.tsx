@@ -5,6 +5,8 @@ import { usePolled, useTheme } from './hooks';
 import { Chat } from './pages/Chat';
 import { Chats } from './pages/Chats';
 import { Dashboard } from './pages/Dashboard';
+import { GoalDetail } from './pages/GoalDetail';
+import { Goals } from './pages/Goals';
 import { McpServers } from './pages/McpServers';
 import { PromptEditor } from './pages/PromptEditor';
 import { Prompts } from './pages/Prompts';
@@ -43,6 +45,7 @@ export function App() {
             Prompts
             {status && <span className="nav-count">{status.queuedRuns > 0 ? `${status.queuedRuns} queued` : ''}</span>}
           </NavLink>
+          <NavLink to="/goals">Goals</NavLink>
           <NavLink to="/runs">
             Runs
             {status && status.activeRuns > 0 && <span className="nav-count">{status.activeRuns} live</span>}
@@ -101,6 +104,8 @@ export function App() {
           <Route path="/prompts" element={<Prompts />} />
           <Route path="/prompts/new" element={<PromptEditor />} />
           <Route path="/prompts/:id" element={<PromptEditor />} />
+          <Route path="/goals" element={<Goals />} />
+          <Route path="/goals/:id" element={<GoalDetail />} />
           <Route path="/runs" element={<Runs />} />
           <Route path="/runs/:id" element={<RunDetail />} />
           <Route path="/mcp" element={<McpServers />} />

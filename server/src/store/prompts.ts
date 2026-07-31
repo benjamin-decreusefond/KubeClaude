@@ -90,6 +90,14 @@ export function listChats(limit = 100): Prompt[] {
     .map(toPrompt);
 }
 
+/** Names are unique across every kind, so a caller picking one has to ask. */
+export function promptNameExists(name: string): boolean {
+  const row = db
+    .prepare<[string], { count: number }>('SELECT COUNT(*) AS count FROM prompts WHERE name = ?')
+    .get(name);
+  return (row?.count ?? 0) > 0;
+}
+
 export function getPrompt(id: string): Prompt | null {
   const row = db.prepare<[string], PromptRow>('SELECT * FROM prompts WHERE id = ?').get(id);
   return row ? toPrompt(row) : null;

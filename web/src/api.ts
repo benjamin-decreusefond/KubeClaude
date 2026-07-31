@@ -2,8 +2,12 @@ import type {
   Capabilities,
   ChatDetail,
   ChatSummary,
+  CreateGoalInput,
   Dashboard,
+  Goal,
+  GoalDetail,
   StartChatInput,
+  UpdateGoalInput,
   McpServer,
   ModelOption,
   Prompt,
@@ -135,6 +139,17 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ name, prompt }),
     }),
+
+  goals: () => request<Goal[]>('/api/goals'),
+  goal: (id: string) => request<GoalDetail>(`/api/goals/${id}`),
+  createGoal: (input: Partial<CreateGoalInput>) =>
+    request<GoalDetail>('/api/goals', { method: 'POST', body: JSON.stringify(input) }),
+  updateGoal: (id: string, patch: UpdateGoalInput) =>
+    request<Goal>(`/api/goals/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  deleteGoal: (id: string) => request<void>(`/api/goals/${id}`, { method: 'DELETE' }),
+  startGoal: (id: string) => request<Goal>(`/api/goals/${id}/start`, { method: 'POST' }),
+  pauseGoal: (id: string) => request<Goal>(`/api/goals/${id}/pause`, { method: 'POST' }),
+  iterateGoal: (id: string) => request<Run>(`/api/goals/${id}/iterate`, { method: 'POST' }),
 
   mcpServers: () => request<McpServer[]>('/api/mcp-servers'),
   createMcpServer: (input: Partial<McpServer>) =>

@@ -35,6 +35,15 @@ lists, env, MCP connections, a working directory, a `CLAUDE.md`, a timeout.
 | `weekly_reset` | Once per weekly window. |
 | `quota_available` | When a configured share of the token budget is free. |
 
+**Goals.** A session that does not stop at one run. Where a prompt answers "run this
+now", a goal answers "keep working on this until it is true": you give it a mission and
+a list of objectives, and it iterates. Each iteration resumes the same Claude session,
+is told which objectives are still open and what earlier iterations achieved, does one
+meaningful unit of work, and ends with a short report. That report is parsed — no second
+model call — objectives it closed are ticked off, and the next iteration is queued once
+the cadence has passed. It stops when everything is ticked, when it hits an iteration
+limit, or when you pause it. See [Goals](#goals-that-keep-going).
+
 **Runs.** Executed through `claude --print --output-format stream-json`. Every message
 is stored, so a run can be watched live over SSE or replayed later. Tokens, cost, turns,
 per-model usage and API time all come from the CLI's own report.
@@ -223,12 +232,71 @@ actually turns it off.
 
 ---
 
+## Goals that keep going
+
+A prompt runs and finishes. A goal keeps working: it is a single Claude session put on a
+loop, with a checklist it is trying to close.
+
+You give it:
+
+- **A mission** — the standing brief every iteration reads. What matters, what "good"
+  looks like, what it must not touch.
+- **Objectives** — one line each, the things that get ticked off. Leave the list empty
+  and the goal is open-ended: it works from the mission and keeps improving.
+- **A cadence** — how long to wait after one iteration before starting the next.
+- Optionally an **iteration limit**, so an unattended goal cannot run forever.
+
+Each iteration is handed the mission, the objectives with their current state, and a
+digest of what the last few iterations did and what they said to do next. It is asked to
+do *one* meaningful unit of work — carried through to something real and verified — and
+to end with a report:
+
+```
+PROGRESS: Added a backoff to the client and covered it with a test.
+DONE: o1, o3
+NEXT: Wire the same backoff into the worker.
+```
+
+That report is read mechanically, which is what keeps the loop cheap: no second model
+call in the normal case, and the objective ids are checked against the list, so an
+iteration cannot tick a box that was never there. If an iteration forgets to write a
+report, the entry says so and the loop carries on — set a **review model** on the goal
+and a cheap model reads the transcript instead.
+
+How it ends:
+
+| Situation | What happens |
+|---|---|
+| Every objective ticked | `achieved`, unless you turned off "stop when achieved" — then it keeps iterating and improving. |
+| Iteration limit reached | `abandoned`. Resuming lifts the limit. |
+| Three failed or timed-out iterations in a row | Paused automatically. Something is wrong with the setup, and looping would spend the budget reproducing it. |
+| Quota ran out mid-iteration | Nothing special: the run parks as `rate_limited` and auto-resume finishes that iteration before the loop moves on. |
+| You pause it | The loop leaves it alone, and any iteration in flight is cancelled. |
+
+A goal owns its own prompt — same runner, same quota accounting, same live output — so
+every iteration is a normal run you can open, watch and replay. It does not appear in the
+prompt list; it is configured from the goal instead.
+
+Worked example — keeping a namespace healthy:
+
+- **Mission** "Keep the media namespace healthy: no CrashLoopBackOff, no pending PVCs,
+  requests that match real usage. Change one thing at a time and verify it. Never delete
+  a StatefulSet."
+- **Objectives** "Every pod is running and ready", "No PVC pending over an hour",
+  "Requests within 20% of observed usage"
+- **Cadence** 60 minutes, **permission mode** `bypassPermissions`, **model**
+  `claude-sonnet-5`
+- **Stop when achieved** off — health is not a thing you finish
+
+---
+
 ## How it hangs together
 
 ```
-Browser ──HTTP/SSE──▶ Fastify ──▶ SQLite (prompts, triggers, runs, events, windows)
+Browser ──HTTP/SSE──▶ Fastify ──▶ SQLite (prompts, triggers, goals, runs, events, windows)
                           │
                           ├── scheduler   evaluates triggers, sweeps for resumable runs
+                          │               and advances goals: review, tick, queue next
                           └── queue ──spawn──▶ claude --print --output-format stream-json
                                                  │
                                                  ├── stdout: one JSON message per line
@@ -249,6 +317,9 @@ back that up and you have backed up KubeClaude.
 | `GET POST /api/prompts/:id/triggers`, `PATCH DELETE /api/triggers/:id` | Triggers |
 | `GET POST /api/chats`, `GET PATCH DELETE /api/chats/:id` | Conversations |
 | `POST /api/chats/:id/messages`, `/stop`, `/promote` | Reply, interrupt, save as a prompt |
+| `GET POST /api/goals`, `GET PATCH DELETE /api/goals/:id` | Goals and their objectives |
+| `POST /api/goals/:id/start`, `/pause`, `/iterate` | Resume the loop, hold it, run one iteration now |
+| `GET /api/goals/:id/iterations` | The progress log |
 | `GET /api/runs`, `/api/runs/:id`, `/api/runs/:id/events`, `/api/runs/:id/thread` | Runs |
 | `POST /api/runs/:id/cancel`, `/resume`, `/follow-up` | Act on a run |
 | `GET POST /api/mcp-servers`, `PATCH DELETE /api/mcp-servers/:id` | MCP connections |

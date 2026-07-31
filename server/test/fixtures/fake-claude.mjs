@@ -106,7 +106,9 @@ process.stdin.on('end', () => {
     subtype: 'success',
     is_error: false,
     session_id: sessionId,
-    result: `done: ${stdin.trim().slice(0, 60)}`,
+    // FAKE_CLAUDE_RESULT stands in for a model that answers in a fixed shape,
+    // such as the report a goal iteration has to end with.
+    result: process.env.FAKE_CLAUDE_RESULT ?? `done: ${stdin.trim().slice(0, 60)}`,
     num_turns: 3,
     duration_ms: 4200,
     duration_api_ms: 3100,

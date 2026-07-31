@@ -118,6 +118,62 @@ export const settingsUpdateSchema = z.object({
   autoResumeDelayMinutes: z.number().int().min(0).max(1440).optional(),
 });
 
+/**
+ * Configuration a goal shares with a prompt. A goal owns its prompt, so these
+ * are edited through the goal rather than in the prompt editor.
+ */
+const goalPromptSchema = z.object({
+  model: z.string().max(120).nullable().default(null),
+  workingDir: z.string().max(1024).nullable().default(null),
+  permissionMode: permissionModeSchema.default('bypassPermissions'),
+  allowedTools: z.array(z.string()).default([]),
+  disallowedTools: z.array(z.string()).default([]),
+  mcpServerIds: z.array(z.string()).default([]),
+  mcpConfig: jsonText('MCP config').default(null),
+  settingsJson: jsonText('Claude settings').default(null),
+  claudeMd: z.string().nullable().default(null),
+  env: envRecord.default({}),
+  maxTurns: z.number().int().positive().max(1000).nullable().default(null),
+  timeoutSeconds: z.number().int().min(30).max(86_400).default(3600),
+});
+
+export const goalCreateSchema = goalPromptSchema.extend({
+  name: z.string().min(1).max(120),
+  description: z.string().max(20_000).default(''),
+  /** One objective per entry; blank entries are dropped. */
+  objectives: z.array(z.string().max(2000)).max(100).default([]),
+  cadenceMinutes: z.number().int().min(0).max(100_000).default(30),
+  maxIterations: z.number().int().min(0).max(10_000).default(0),
+  stopWhenAchieved: z.boolean().default(true),
+  reviewModel: z.string().max(120).nullable().default(null),
+  /** Keep one Claude session across iterations, so context carries forward. */
+  keepSession: z.boolean().default(true),
+  /** Start the first iteration immediately instead of waiting for the loop. */
+  startNow: z.boolean().default(true),
+});
+
+export const objectiveSchema = z.object({
+  id: z.string().min(1).max(40),
+  text: z.string().min(1).max(2000),
+  done: z.boolean(),
+  doneAt: z.string().nullable(),
+  note: z.string().max(2000).nullable(),
+});
+
+export const goalUpdateSchema = goalPromptSchema.partial().extend({
+  name: z.string().min(1).max(120).optional(),
+  description: z.string().max(20_000).optional(),
+  objectives: z.array(objectiveSchema).max(100).optional(),
+  /** Extra objectives, appended with fresh ids. */
+  addObjectives: z.array(z.string().max(2000)).max(100).optional(),
+  status: z.enum(['active', 'paused', 'achieved', 'abandoned']).optional(),
+  cadenceMinutes: z.number().int().min(0).max(100_000).optional(),
+  maxIterations: z.number().int().min(0).max(10_000).optional(),
+  stopWhenAchieved: z.boolean().optional(),
+  reviewModel: z.string().max(120).nullable().optional(),
+  keepSession: z.boolean().optional(),
+});
+
 export const runRequestSchema = z.object({
   /** Run something other than the stored prompt text, without editing the prompt. */
   promptText: z.string().min(1).optional(),

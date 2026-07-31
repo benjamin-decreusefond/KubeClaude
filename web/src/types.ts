@@ -14,7 +14,97 @@ export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'bypassPermiss
 
 export type CompletionCheck = 'marker' | 'judge' | 'always' | 'never';
 
-export type PromptKind = 'scheduled' | 'chat';
+export type PromptKind = 'scheduled' | 'chat' | 'goal';
+
+export type GoalStatus = 'active' | 'paused' | 'achieved' | 'abandoned';
+
+export interface Objective {
+  id: string;
+  text: string;
+  done: boolean;
+  doneAt: string | null;
+  note: string | null;
+}
+
+export interface Goal {
+  id: string;
+  promptId: string;
+  name: string;
+  description: string;
+  objectives: Objective[];
+  status: GoalStatus;
+  cadenceMinutes: number;
+  maxIterations: number;
+  iteration: number;
+  stopWhenAchieved: boolean;
+  reviewModel: string | null;
+  lastRunId: string | null;
+  lastIterationAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  progress: { done: number; total: number };
+  prompt: Prompt | null;
+  lastRun: Run | null;
+}
+
+export interface GoalIteration {
+  id: string;
+  goalId: string;
+  seq: number;
+  runId: string | null;
+  createdAt: string;
+  summary: string;
+  nextStep: string | null;
+  achieved: string[];
+  source: 'report' | 'judge' | 'none';
+  runStatus: string | null;
+}
+
+export interface GoalDetail extends Goal {
+  iterations: GoalIteration[];
+  runs: Run[];
+}
+
+export interface CreateGoalInput {
+  name: string;
+  description: string;
+  objectives: string[];
+  cadenceMinutes: number;
+  maxIterations: number;
+  stopWhenAchieved: boolean;
+  reviewModel: string | null;
+  keepSession: boolean;
+  startNow: boolean;
+  model: string | null;
+  workingDir: string | null;
+  permissionMode: PermissionMode;
+  allowedTools: string[];
+  disallowedTools: string[];
+  mcpServerIds: string[];
+  timeoutSeconds: number;
+  maxTurns: number | null;
+}
+
+export interface UpdateGoalInput {
+  name?: string;
+  description?: string;
+  objectives?: Objective[];
+  addObjectives?: string[];
+  status?: GoalStatus;
+  cadenceMinutes?: number;
+  maxIterations?: number;
+  stopWhenAchieved?: boolean;
+  reviewModel?: string | null;
+  keepSession?: boolean;
+  model?: string | null;
+  workingDir?: string | null;
+  permissionMode?: PermissionMode;
+  allowedTools?: string[];
+  disallowedTools?: string[];
+  mcpServerIds?: string[];
+  timeoutSeconds?: number;
+  maxTurns?: number | null;
+}
 
 export interface Prompt {
   id: string;
