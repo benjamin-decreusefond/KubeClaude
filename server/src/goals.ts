@@ -222,22 +222,6 @@ function resolveAchieved(goal: Goal, claimed: string[]): string[] {
   return [...resolved];
 }
 
-function tickObjectives(objectives: Objective[], achieved: string[], note: string): Objective[] {
-  if (achieved.length === 0) return objectives;
-  const now = new Date().toISOString();
-  const trimmed = note.trim();
-  return objectives.map((objective) =>
-    achieved.includes(objective.id) && !objective.done
-      ? {
-          ...objective,
-          done: true,
-          doneAt: now,
-          note: trimmed ? trimmed.slice(0, 400) : 'Closed by an iteration',
-        }
-      : objective,
-  );
-}
-
 /**
  * Turn a finished iteration run into a progress entry and tick off whatever it
  * closed. Returns the goal as it now stands, or null when the run was not one
@@ -271,8 +255,9 @@ export async function reviewIteration(goal: Goal, run: Run): Promise<Goal | null
     runStatus: wasRestarted(run) ? INTERRUPTED : run.status,
   });
 
-  const objectives = tickObjectives(goal.objectives, achieved, summary);
-  return goalStore.updateGoal(goal.id, { objectives });
+  // Against the goal as it stands now: an iteration takes minutes, and somebody
+  // may well have added an objective while this one was working.
+  return goalStore.tickObjectives(goal.id, achieved, summary);
 }
 
 /** True when this run died because KubeClaude itself was restarted under it. */
@@ -307,11 +292,7 @@ export function startIteration(goal: Goal, triggerType = 'goal'): Run | null {
   });
   if (!run) return null;
 
-  goalStore.updateGoal(goal.id, {
-    iteration: goal.iteration + 1,
-    lastRunId: run.id,
-    lastIterationAt: new Date().toISOString(),
-  });
+  goalStore.recordIterationStart(goal.id, run.id);
   return run;
 }
 

@@ -153,6 +153,56 @@ export function updateGoal(id: string, patch: Partial<Goal>): Goal | null {
   return getGoal(id);
 }
 
+/**
+ * Tick objectives off the goal **as it is now**, rather than as the caller last
+ * saw it.
+ *
+ * An iteration can take minutes, and the person watching it is invited to add
+ * objectives while it runs. Writing back the array the review started from
+ * would erase whatever they added in the meantime — silently, since the write
+ * looks like an ordinary update. Reading and writing inside one transaction is
+ * what makes the two safe to do at once.
+ */
+export function tickObjectives(id: string, achieved: string[], note: string): Goal | null {
+  if (achieved.length === 0) return getGoal(id);
+
+  return db.transaction(() => {
+    const current = getGoal(id);
+    if (!current) return null;
+
+    const now = new Date().toISOString();
+    const trimmed = note.trim();
+    const objectives = current.objectives.map((objective) =>
+      achieved.includes(objective.id) && !objective.done
+        ? {
+            ...objective,
+            done: true,
+            doneAt: now,
+            note: trimmed ? trimmed.slice(0, 400) : 'Closed by an iteration',
+          }
+        : objective,
+    );
+
+    db.prepare('UPDATE goals SET objectives = ?, updated_at = ? WHERE id = ?').run(
+      JSON.stringify(objectives),
+      now,
+      id,
+    );
+    return getGoal(id);
+  })();
+}
+
+/**
+ * Count an iteration as started. The increment happens in SQL rather than from
+ * a number the caller read earlier, so it cannot lose count.
+ */
+export function recordIterationStart(id: string, runId: string): Goal | null {
+  db.prepare(
+    'UPDATE goals SET iteration = iteration + 1, last_run_id = ?, last_iteration_at = ?, updated_at = ? WHERE id = ?',
+  ).run(runId, new Date().toISOString(), new Date().toISOString(), id);
+  return getGoal(id);
+}
+
 export function deleteGoal(id: string): boolean {
   return db.prepare('DELETE FROM goals WHERE id = ?').run(id).changes > 0;
 }
