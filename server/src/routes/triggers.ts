@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { Cron } from 'croner';
 import { enqueueRun } from '../queue.js';
 import * as triggerStore from '../store/triggers.js';
-import { triggerUpdateSchema } from './schemas.js';
+import { triggerRequirement, triggerUpdateSchema } from './schemas.js';
 
 const idParams = z.object({ id: z.string().min(1) });
 
@@ -19,12 +19,15 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
     const existing = triggerStore.getTrigger(id);
     if (!existing) return reply.code(404).send({ error: 'Trigger not found' });
 
+    // The same rules the create path enforces, applied to what the trigger will
+    // look like after the edit. Without this a trigger can be saved in a state
+    // where it simply never fires, and nothing says so.
     const type = parsed.data.type ?? existing.type;
     const cronExpression =
       parsed.data.cronExpression === undefined ? existing.cronExpression : parsed.data.cronExpression;
-    if (type === 'cron' && !cronExpression?.trim()) {
-      return reply.code(400).send({ error: 'cron triggers need a cron expression' });
-    }
+    const config = parsed.data.config ?? existing.config;
+    const problem = triggerRequirement(type, cronExpression, config);
+    if (problem) return reply.code(400).send({ error: problem });
     // Changing the schedule invalidates the computed next fire time.
     return triggerStore.updateTrigger(id, { ...parsed.data, nextFireAt: null });
   });
