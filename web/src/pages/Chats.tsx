@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api';
-import { Badge, Banner, Card, Empty, Field, StatusBadge } from '../components/primitives';
+import { Banner, Card, Empty, Field, StatusBadge } from '../components/primitives';
 import { formatRelative, formatTokens } from '../format';
 import { usePolled, useTicker } from '../hooks';
 import type { ChatSummary, McpServer, ModelOption, PermissionMode, Prompt } from '../types';

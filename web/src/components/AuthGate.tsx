@@ -20,7 +20,7 @@ export function AuthGate({ children }: { children: (state: AuthState, reload: ()
   const [state, setState] = useState<AuthState | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (): Promise<void> => {
     try {
       setState(await api.authState());
       setError(null);
@@ -46,7 +46,7 @@ export function AuthGate({ children }: { children: (state: AuthState, reload: ()
   if (state.setupRequired && !state.authenticated) {
     return (
       <Shell>
-        <Setup onDone={load} />
+        <Setup onDone={() => void load()} />
       </Shell>
     );
   }
@@ -54,12 +54,12 @@ export function AuthGate({ children }: { children: (state: AuthState, reload: ()
   if (!state.authenticated) {
     return (
       <Shell>
-        <Login method={state.method} onDone={load} />
+        <Login method={state.method} onDone={() => void load()} />
       </Shell>
     );
   }
 
-  return <>{children(state, load)}</>;
+  return <>{children(state, () => void load())}</>;
 }
 
 /** A centred single-card page, so the login screen does not sit in the app chrome. */

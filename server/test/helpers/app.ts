@@ -78,7 +78,7 @@ export async function startTestApp(options: TestAppOptions = {}): Promise<TestAp
 
       return {
         status: response.statusCode,
-        headers: response.headers as Record<string, unknown>,
+        headers: response.headers,
         body: response.body,
         json<T>() {
           return JSON.parse(response.body) as T;
@@ -99,7 +99,7 @@ export async function startTestApp(options: TestAppOptions = {}): Promise<TestAp
           })
           .then((response) => ({
             status: response.statusCode,
-            headers: response.headers as Record<string, unknown>,
+            headers: response.headers,
             body: response.body,
             json<T>() {
               return JSON.parse(response.body) as T;

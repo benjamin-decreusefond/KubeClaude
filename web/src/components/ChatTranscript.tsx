@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { formatCost, formatTime, formatTokens } from '../format';
+import { asText } from './jsonText';
 import type { Run, RunEvent } from '../types';
 
 /** One thing to show in the conversation. */
@@ -48,7 +49,7 @@ export function buildBubbles(runs: Run[], eventsByRun: Map<string, RunEvent[]>):
             text:
               payload.kind === 'rate-limited'
                 ? 'The Claude quota ran out during this reply.'
-                : String(payload.message ?? 'Something went wrong'),
+                : asText(payload.message, 'Something went wrong'),
           });
         }
         continue;
@@ -72,7 +73,7 @@ export function buildBubbles(runs: Run[], eventsByRun: Map<string, RunEvent[]>):
             kind: 'tool',
             key,
             ts: event.ts,
-            name: String(typed.name ?? 'tool'),
+            name: asText(typed.name, 'tool'),
             input: preview(typed.input),
           };
           if (typeof typed.id === 'string') pendingTools.set(typed.id, bubble);

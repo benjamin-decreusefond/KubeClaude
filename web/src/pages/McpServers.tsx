@@ -92,19 +92,17 @@ export function McpServers() {
               </button>
               <button
                 className="ghost small"
-                onClick={async () => {
-                  await api.updateMcpServer(server.id, { enabled: !server.enabled });
-                  refresh();
-                }}
+                onClick={() =>
+                  void api.updateMcpServer(server.id, { enabled: !server.enabled }).then(refresh)
+                }
               >
                 {server.enabled ? 'Disable' : 'Enable'}
               </button>
               <button
                 className="ghost small"
-                onClick={async () => {
+                onClick={() => {
                   if (!confirm(`Remove the ${server.name} connection?`)) return;
-                  await api.deleteMcpServer(server.id);
-                  refresh();
+                  void api.deleteMcpServer(server.id).then(refresh);
                 }}
               >
                 ✕

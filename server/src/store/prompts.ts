@@ -191,7 +191,7 @@ export function updatePrompt(id: string, patch: Partial<Prompt>): Prompt | null 
     assignments.push(`${column} = ?`);
     if (JSON_FIELDS.has(field)) values.push(JSON.stringify(value));
     else if (BOOL_FIELDS.has(field)) values.push(boolToDb(Boolean(value)));
-    else values.push(value as never);
+    else values.push(value);
   }
 
   if (assignments.length === 0) return getPrompt(id);

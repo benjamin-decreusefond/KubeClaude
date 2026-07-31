@@ -15,6 +15,10 @@ export const PASSWORD = 'a-good-password';
  * purpose, and the browser logs every one of those to the console.
  */
 export const test = base.extend<{ page: Page; consoleErrors: string[] }>({
+  // Playwright parses this parameter to work out which fixtures a fixture
+  // depends on, so the empty destructuring pattern is required rather than
+  // stylistic — it will not accept a named argument here.
+  // eslint-disable-next-line no-empty-pattern
   consoleErrors: async ({}, use) => {
     await use([]);
   },

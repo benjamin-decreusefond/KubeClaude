@@ -60,7 +60,7 @@ export function updateMcpServer(id: string, patch: Partial<McpServerInput>): Mcp
     const column = columns[field];
     if (!column || value === undefined) continue;
     assignments.push(`${column} = ?`);
-    values.push(field === 'enabled' ? boolToDb(Boolean(value)) : (value as never));
+    values.push(field === 'enabled' ? boolToDb(Boolean(value)) : (value));
   }
   if (assignments.length === 0) return getMcpServer(id);
   assignments.push('updated_at = ?');

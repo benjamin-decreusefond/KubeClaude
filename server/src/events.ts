@@ -10,15 +10,15 @@ export interface AppEvents {
 
 class TypedEmitter extends EventEmitter {
   override emit<K extends keyof AppEvents>(event: K, ...args: AppEvents[K]): boolean {
-    return super.emit(event as string, ...args);
+    return super.emit(event, ...args);
   }
 
   override on<K extends keyof AppEvents>(event: K, listener: (...args: AppEvents[K]) => void): this {
-    return super.on(event as string, listener as (...args: unknown[]) => void);
+    return super.on(event, listener as (...args: unknown[]) => void);
   }
 
   override off<K extends keyof AppEvents>(event: K, listener: (...args: AppEvents[K]) => void): this {
-    return super.off(event as string, listener as (...args: unknown[]) => void);
+    return super.off(event, listener as (...args: unknown[]) => void);
   }
 }
 

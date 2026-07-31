@@ -142,7 +142,7 @@ export function updateGoal(id: string, patch: Partial<Goal>): Goal | null {
     assignments.push(`${column} = ?`);
     if (field === 'objectives') values.push(JSON.stringify(value));
     else if (field === 'stopWhenAchieved') values.push(boolToDb(Boolean(value)));
-    else values.push(value as never);
+    else values.push(value);
   }
 
   if (assignments.length === 0) return getGoal(id);

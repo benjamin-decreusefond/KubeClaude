@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { formatTime } from '../format';
+import { asText } from './jsonText';
 import type { RunEvent } from '../types';
 
 interface Line {
@@ -29,7 +30,7 @@ function linesFor(event: RunEvent): Line[] {
         .join(' ');
       return [{ ...base, kind: 'exec', className: 'system', body: `claude ${args}\ncwd: ${payload.cwd}` }];
     }
-    return [{ ...base, kind: String(payload.kind ?? 'system'), className: 'system', body: summarise(payload) }];
+    return [{ ...base, kind: asText(payload.kind, 'system'), className: 'system', body: summarise(payload) }];
   }
 
   const message = event.payload as Record<string, unknown>;
@@ -42,7 +43,7 @@ function linesFor(event: RunEvent): Line[] {
         ...base,
         kind: 'init',
         className: 'system',
-        body: `session ${String(message.session_id ?? '')} · model ${String(message.model ?? '?')} · ${tools} tools · ${servers} MCP servers`,
+        body: `session ${asText(message.session_id)} · model ${asText(message.model, '?')} · ${tools} tools · ${servers} MCP servers`,
       },
     ];
   }
@@ -60,7 +61,7 @@ function linesFor(event: RunEvent): Line[] {
         out.push({
           ...base,
           key,
-          kind: String(typed.name ?? 'tool'),
+          kind: asText(typed.name, 'tool'),
           className: 'tool',
           body: preview(typed.input),
         });
@@ -73,7 +74,7 @@ function linesFor(event: RunEvent): Line[] {
           body: preview(typed.content),
         });
       } else if (typed.type === 'thinking') {
-        out.push({ ...base, key, kind: 'thinking', className: '', body: String(typed.thinking ?? '') });
+        out.push({ ...base, key, kind: 'thinking', className: '', body: asText(typed.thinking) });
       }
     });
     return out;
@@ -87,7 +88,7 @@ function linesFor(event: RunEvent): Line[] {
         kind: 'done',
         className: message.is_error ? 'error' : 'system',
         body:
-          `${String(message.subtype ?? '')} · ${message.num_turns ?? 0} turns · ` +
+          `${asText(message.subtype)} · ${asText(message.num_turns, '0')} turns · ` +
           `in ${usage.input_tokens ?? 0} / out ${usage.output_tokens ?? 0} / ` +
           `cache ${(usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0)} tokens` +
           (typeof message.result === 'string' ? `\n\n${message.result}` : ''),
@@ -101,7 +102,7 @@ function linesFor(event: RunEvent): Line[] {
 function summarise(payload: Record<string, unknown>): string {
   return Object.entries(payload)
     .filter(([key]) => key !== 'kind')
-    .map(([key, value]) => `${key}: ${typeof value === 'object' ? JSON.stringify(value) : String(value)}`)
+    .map(([key, value]) => `${key}: ${asText(value)}`)
     .join('\n');
 }
 
