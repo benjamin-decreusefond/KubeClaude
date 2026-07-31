@@ -168,6 +168,16 @@ export async function authenticate(request: FastifyRequest): Promise<AuthOutcome
     return { allowed: true, via: 'open', username: null, setupRequired: false, challenge: false };
   }
 
+  // A session is a credential this instance issued after a password, so it is
+  // honoured in every credentialled mode — including `external`. Without this,
+  // switching to `external` from the UI would lock the person doing it out
+  // between the click and the next request, before they can even see whether
+  // the proxy header arrives.
+  const cookie = readCookie(request, SESSION_COOKIE);
+  if (cookie && useSession(cookie)) {
+    return { allowed: true, via: 'session', username: stored.username, setupRequired: false, challenge: false };
+  }
+
   if (method === 'external') {
     const header = stored.externalUserHeader.trim().toLowerCase();
     // An empty header name means "trust the proxy unconditionally" — for proxies
@@ -183,13 +193,6 @@ export async function authenticate(request: FastifyRequest): Promise<AuthOutcome
     // A proxy that stopped sending the header is a misconfiguration, and the
     // safe reading of a misconfiguration is "not authenticated".
     return deny();
-  }
-
-  // A session works in every credentialled mode, including basic: it is how the
-  // UI signs out and how the setup wizard hands over to the running app.
-  const cookie = readCookie(request, SESSION_COOKIE);
-  if (cookie && useSession(cookie)) {
-    return { allowed: true, via: 'session', username: stored.username, setupRequired: false, challenge: false };
   }
 
   if (!stored.configured) {

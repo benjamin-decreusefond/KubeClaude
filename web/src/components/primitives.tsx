@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { cloneElement, isValidElement, useId, type ReactNode } from 'react';
 import type { RunStatus } from '../types';
 
 export function Card({
@@ -127,6 +127,12 @@ export function Badge({ children, tone }: { children: ReactNode; tone?: string }
   return <span className={`badge${tone ? ` ${tone}` : ''}`}>{children}</span>;
 }
 
+/**
+ * A labelled control. The label is wired to the control it names — clicking it
+ * focuses the field, and a screen reader announces the two together — by handing
+ * the child an id when it does not already carry one. Doing it here rather than
+ * at every call site is what keeps it true for all of them.
+ */
 export function Field({
   label,
   hint,
@@ -136,11 +142,27 @@ export function Field({
   hint?: ReactNode;
   children: ReactNode;
 }) {
+  const generatedId = useId();
+  const hintId = `${generatedId}-hint`;
+
+  const child = isValidElement<{ id?: string; 'aria-describedby'?: string }>(children) ? children : null;
+  const controlId = child?.props.id ?? generatedId;
+  const control = child
+    ? cloneElement(child, {
+        id: controlId,
+        'aria-describedby': hint ? hintId : child.props['aria-describedby'],
+      })
+    : children;
+
   return (
     <div className="field">
-      <label>{label}</label>
-      {children}
-      {hint && <div className="hint">{hint}</div>}
+      <label htmlFor={controlId}>{label}</label>
+      {control}
+      {hint && (
+        <div className="hint" id={hintId}>
+          {hint}
+        </div>
+      )}
     </div>
   );
 }

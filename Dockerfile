@@ -13,6 +13,11 @@ RUN apt-get update \
 COPY package.json package-lock.json* ./
 COPY server/package.json server/
 COPY web/package.json web/
+# The e2e workspace has to exist for the install to resolve, but its browsers
+# have no business in a runtime image — they are installed in CI, where the
+# browser pass actually runs.
+COPY e2e/package.json e2e/
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 RUN npm install --no-audit --no-fund
 
 # server/ and web/ each carry their own tsconfig; there is no root one to copy.
@@ -53,7 +58,13 @@ ARG CLAUDE_CODE_VERSION=latest
 RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
     && npm cache clean --force
 
+# Stamped by CI with the release tag or the commit SHA, and reported by
+# /api/status. Without it a running instance cannot say which build it is, which
+# is exactly the question after a deploy.
+ARG APP_VERSION=dev
+
 ENV NODE_ENV=production \
+    APP_VERSION=${APP_VERSION} \
     DATA_DIR=/data \
     WEB_DIR=/app/web/dist \
     PORT=8080 \

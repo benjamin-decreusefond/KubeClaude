@@ -1,5 +1,10 @@
 name: CI
 
+# Installing the workspaces would otherwise fetch every Playwright browser in
+# every job. The one job that needs a browser installs Chromium explicitly.
+env:
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+
 on:
   push:
     branches: [main]
@@ -27,9 +32,43 @@ jobs:
       - name: Build
         run: npm run build
 
+  # The browser half of the suite: the built server, the built SPA and a real
+  # Chromium, against a throwaway database and the fake Claude CLI. It is what
+  # makes a change to the UI verifiable rather than merely compilable.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm install --no-audit --no-fund
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: e2e
+
+      - name: Build
+        run: npm run build
+
+      - name: End-to-end
+        run: npm run e2e
+
+      # Traces and screenshots of whatever failed, so a failure can be read
+      # without reproducing it — including by an agent working on this repo.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-results
+          path: e2e/test-results
+          retention-days: 7
+
   image:
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build, e2e]
     permissions:
       contents: read
     env:
@@ -54,6 +93,10 @@ jobs:
           context: .
           # Only publish from main; pull requests just prove the image builds.
           push: ${{ github.event_name == 'push' }}
+          # What /api/status will report, so a running pod can be matched to a
+          # commit without guessing.
+          build-args: |
+            APP_VERSION=main-${{ github.sha }}
           tags: |
             docker.io/${{ env.NAMESPACE }}/kubeclaude:latest
             docker.io/${{ env.NAMESPACE }}/kubeclaude:${{ github.sha }}
