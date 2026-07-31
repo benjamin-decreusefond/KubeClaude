@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { KeyValueEditor } from '../components/KeyValueEditor';
 import { Badge, Banner, Card, Checkbox, Field } from '../components/primitives';
+import { SecuritySettings } from '../components/SecuritySettings';
 import { formatTokens } from '../format';
 import { usePolled } from '../hooks';
 import type { BillingMode, BudgetBasis, Capabilities, ModelOption, Settings, Status } from '../types';
@@ -324,6 +325,8 @@ export function SettingsPage() {
           />
         </Field>
       </Card>
+
+      <SecuritySettings />
 
       {message && (
         <div className="toast" onClick={() => setMessage(null)}>

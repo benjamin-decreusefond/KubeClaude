@@ -14,14 +14,20 @@ import { RunDetail } from './pages/RunDetail';
 import { Runs } from './pages/Runs';
 import { SettingsPage } from './pages/Settings';
 import { Modal, Field } from './components/primitives';
+import type { AuthState } from './types';
 
-export function App() {
+export function App({ auth, onAuthChanged }: { auth: AuthState; onAuthChanged: () => void }) {
   const [theme, setTheme] = useTheme();
   const [showToken, setShowToken] = useState(false);
   const [tokenDraft, setTokenDraft] = useState(getToken());
 
   const { data: status, error } = usePolled(() => api.status(), 15_000);
   const unauthorized = error?.toLowerCase().includes('unauthorized') ?? false;
+
+  const signOut = async () => {
+    await api.logout().catch(() => undefined);
+    onAuthChanged();
+  };
 
   return (
     <div className="app">
@@ -64,6 +70,16 @@ export function App() {
               </div>
             </div>
           )}
+          <div>
+            {auth.method === 'none' ? (
+              <span className="stat-note">No authentication</span>
+            ) : (
+              <span className="stat-note">
+                {auth.username ? `Signed in as ${auth.username}` : 'Signed in'}
+                {auth.via === 'local' ? ' (local network)' : auth.via === 'proxy' ? ' (via proxy)' : ''}
+              </span>
+            )}
+          </div>
           <div className="row">
             <select
               value={theme}
@@ -75,9 +91,15 @@ export function App() {
               <option value="light">Light</option>
               <option value="dark">Dark</option>
             </select>
-            <button className="ghost small" onClick={() => setShowToken(true)}>
-              API token
-            </button>
+            {auth.via === 'session' ? (
+              <button className="ghost small" onClick={() => void signOut()}>
+                Sign out
+              </button>
+            ) : (
+              <button className="ghost small" onClick={() => setShowToken(true)}>
+                API key
+              </button>
+            )}
           </div>
         </div>
       </aside>
@@ -89,9 +111,9 @@ export function App() {
               !
             </span>
             <div>
-              This KubeClaude requires an API token.{' '}
-              <button className="ghost small" onClick={() => setShowToken(true)}>
-                Enter it
+              Your session is no longer valid.{' '}
+              <button className="ghost small" onClick={onAuthChanged}>
+                Sign in again
               </button>
             </div>
           </div>
@@ -116,7 +138,7 @@ export function App() {
 
       {showToken && (
         <Modal
-          title="API token"
+          title="API key"
           onClose={() => setShowToken(false)}
           footer={
             <>
@@ -136,8 +158,8 @@ export function App() {
           }
         >
           <Field
-            label="Bearer token"
-            hint="Only needed when the server runs with KUBECLAUDE_AUTH_TOKEN set. Stored in this browser only."
+            label="API key or static token"
+            hint="Not needed for a normal sign-in — the session cookie handles that. Use it when this browser has to talk to the API as a machine would. Stored in this browser only."
           >
             <input
               type="password"

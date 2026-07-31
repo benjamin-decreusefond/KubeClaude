@@ -190,6 +190,62 @@ export interface UsageWindow {
  */
 export type BudgetBasis = 'weighted' | 'input_output' | 'total';
 
+/**
+ * How a person proves who they are. Machine clients are separate: an API key
+ * always works, whatever this says, so automation does not break when the
+ * login method changes.
+ */
+export type AuthMethod =
+  /** Nobody is asked anything. Only sane behind something else that gates access. */
+  | 'none'
+  /** A login page and a session cookie. */
+  | 'forms'
+  /** The browser's own credentials dialog, sent on every request. */
+  | 'basic'
+  /**
+   * A reverse proxy in front (oauth2-proxy, Authelia, Cloudflare Access) has
+   * already authenticated the request. KubeClaude trusts it and reads the user
+   * name out of a header.
+   */
+  | 'external';
+
+/** Whether the local network is treated as already trusted. */
+export type AuthRequirement = 'always' | 'local_bypass';
+
+export interface AuthConfig {
+  method: AuthMethod;
+  requirement: AuthRequirement;
+  /** Header carrying the user name in `external` mode. */
+  externalUserHeader: string;
+  /** Set once, at setup; changing it does not invalidate anything else. */
+  username: string;
+  /** True once a password has been set, so the UI knows setup is behind it. */
+  configured: boolean;
+  /** How long a forms session stays valid. */
+  sessionDays: number;
+  updatedAt: string;
+}
+
+/**
+ * What the login screen is allowed to know before anybody has authenticated:
+ * enough to render the right form, and nothing about the instance itself.
+ */
+export interface AuthState {
+  method: AuthMethod;
+  /** Nobody has set a password yet, so the first thing to do is set one. */
+  setupRequired: boolean;
+  /** The caller is already authenticated. */
+  authenticated: boolean;
+  /** Who they are, when that is known. */
+  username: string | null;
+  /** How they got in, for the UI to explain itself. */
+  via: 'session' | 'basic' | 'proxy' | 'api-key' | 'local' | 'open' | null;
+  /** The method is pinned by an environment variable and cannot be changed here. */
+  locked: boolean;
+  /** This request came from a private address, so the local bypass could apply. */
+  local: boolean;
+}
+
 export interface Settings {
   /** Length of a Claude session window, in hours. */
   sessionWindowHours: number;

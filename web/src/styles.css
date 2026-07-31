@@ -1271,3 +1271,28 @@ button.small {
     gap: 2px;
   }
 }
+
+/* --------------------------------------------------------------------------
+   Sign-in and first-run setup
+   -------------------------------------------------------------------------- */
+
+/*
+ * Deliberately outside the app chrome: before you are authenticated there is no
+ * sidebar to speak of, and a login form floating in the full layout reads as a
+ * page that failed to load rather than one asking you a question.
+ */
+.auth-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--page);
+}
+
+.auth-panel {
+  width: min(520px, 100%);
+}
+
+.auth-panel .card {
+  margin: 0;
+}

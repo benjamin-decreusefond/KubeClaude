@@ -25,6 +25,12 @@ a conversation does what you want, save it as a prompt and put it on a schedule.
 **Prompts.** A standing task: prompt text, model, permission mode, tool allow/deny
 lists, env, MCP connections, a working directory, a `CLAUDE.md`, a timeout.
 
+**Authentication.** It asks you to set a password the first time you open it, and after
+that you choose how to sign in: a login page, HTTP basic, a trusted reverse proxy, or
+nothing at all — plus the "skip it on the local network" switch Sonarr and Radarr have.
+An API key covers scripts in every one of those modes. See
+[Who can reach it](#who-can-reach-it).
+
 **Triggers.** Any number per prompt:
 
 | Trigger | Fires |
@@ -102,7 +108,8 @@ Everything is environment variables; the rest is configured in the UI.
 | `MAX_CONCURRENT_RUNS` | `1` | Parallel runs. Raising it spends quota faster. |
 | `SCHEDULER_INTERVAL_MS` | `20000` | How often triggers are evaluated. |
 | `RUN_RETENTION_DAYS` | `30` | Runs older than this are pruned. `0` keeps everything. |
-| `KUBECLAUDE_AUTH_TOKEN` | — | If set, the API and UI require this bearer token. **Set it if the ingress is reachable from the internet** — a KubeClaude with credentials is a Claude that runs commands. |
+| `KUBECLAUDE_AUTH_TOKEN` | — | A static credential accepted as `Authorization: Bearer` or `X-Api-Key`, on top of whatever login method is configured. Optional now that the app has its own accounts — see [Who can reach it](#who-can-reach-it). |
+| `AUTH_METHOD` | — | Pin the login method to `none`, `forms`, `basic` or `external`. Set it and the UI shows the choice as locked, so an instance deliberately placed behind an SSO proxy cannot have that turned off from inside the app. |
 | `FORWARD_ENV_PREFIXES` | — | Comma-separated prefixes of pod env vars to forward into runs, e.g. `GITHUB_,GIT_`. Nothing is forwarded by default. |
 | `EXPOSE_KUBERNETES` | `true` | Forward `KUBERNETES_SERVICE_HOST`/`PORT` so `kubectl` can reach the API server as the pod's ServiceAccount. Set `false` to deny cluster access outright. |
 | `CLAUDE_BIN` | `claude` | Path to the CLI. |
@@ -232,6 +239,49 @@ actually turns it off.
 
 ---
 
+## Who can reach it
+
+A KubeClaude with credentials is a Claude that runs commands — on your cluster, in your
+repositories, with your tokens. So the first time you open it, it asks you to set a
+password before it will show you anything.
+
+Setup happens in the browser: username, password, and how you want to sign in from then
+on. It hands you an **API key** once, and that key keeps working whatever you change
+later — automation does not break when you change how people sign in. The password and
+the key are stored scrypt-hashed; sessions live in the database, so signing out, changing
+the password or switching method revokes them for real.
+
+**Login methods**, changed at any time in Settings → Security:
+
+| Method | What it does |
+|---|---|
+| **Forms** | A login page and a session cookie. The default, and what you want unless something in front already authenticates. |
+| **Basic** | The browser's own credentials dialog, sent on every request. No login page, and no signing out short of closing the browser. |
+| **External** | A reverse proxy in front — oauth2-proxy, Authelia, Cloudflare Access, an ingress with SSO — has already authenticated the request. KubeClaude reads the user name from a header (`X-Forwarded-User` by default; empty means trust the proxy unconditionally). If the header stops arriving the request is refused, because a proxy that stopped sending it is a misconfiguration rather than an invitation. |
+| **None** | Nobody is asked anything. Only sane behind a VPN or a proxy that gates access for you. |
+
+**Skip authentication on the local network** is the other switch, the same one Sonarr and
+Radarr offer: requests from `127.0.0.1`, `10.`, `172.16–31.`, `192.168.` and IPv6 ULA get
+in without signing in. Convenient at home, and wrong the moment that port is reachable
+from outside — note that behind a reverse proxy *every* request looks local unless the
+proxy sets the forwarded headers.
+
+A few details worth knowing:
+
+- **Upgrading an instance that used `KUBECLAUDE_AUTH_TOKEN`** does not open a window: the
+  setup screen requires that token before it will set a password, so whoever gets there
+  first cannot claim the instance.
+- **`AUTH_METHOD` in the environment wins**, and the UI shows the method as locked. That
+  is for the GitOps case: the cluster decides this instance sits behind an SSO proxy, and
+  nothing inside the app should be able to turn that off.
+- **Failed logins are rate-limited** per address. scrypt makes each attempt expensive,
+  which is exactly why guessing has to be capped — otherwise it is a way to burn the CPU
+  the runs need.
+- **The API key and the static token work in every mode**, including `external`. That is
+  how a script talks to an instance whose humans sign in through SSO.
+
+---
+
 ## Goals that keep going
 
 A prompt runs and finishes. A goal keeps working: it is a single Claude session put on a
@@ -325,7 +375,10 @@ back that up and you have backed up KubeClaude.
 | `GET POST /api/mcp-servers`, `PATCH DELETE /api/mcp-servers/:id` | MCP connections |
 | `GET PATCH /api/settings`, `GET /api/settings/defaults` | Settings, and the shipped defaults |
 | `GET /api/stream` | SSE: run created/updated, run output, quota changed |
-| `GET /healthz`, `/readyz` | Probes (never require the auth token). `/readyz` reports credential state but stays ready without it, so a missing token does not take the UI offline. |
+| `GET /api/auth/state`, `POST /api/auth/setup`, `/login`, `/logout` | Public: what the login screen needs, and the three things it can do |
+| `GET PATCH /api/auth/config` | Login method, local bypass, proxy header, username, session lifetime |
+| `POST /api/auth/password`, `/api-key`, `/sessions/revoke` | Change the password, mint a new API key, sign every browser out |
+| `GET /healthz`, `/readyz` | Probes (never authenticated). `/readyz` reports credential state but stays ready without it, so a missing token does not take the UI offline. |
 
 ### Development
 

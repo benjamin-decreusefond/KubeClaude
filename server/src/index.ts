@@ -1,15 +1,17 @@
-import { timingSafeEqual } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import Fastify, { type FastifyError } from 'fastify';
 import fastifyStatic from '@fastify/static';
+import { authenticate, effectiveMethod, isPublicPath, localBypassApplies } from './auth/guard.js';
 import { config, hasCredentials } from './config.js';
 import { migrate } from './db.js';
 import { ensureDirectories } from './claude/runner.js';
 import { logger } from './logger.js';
 import { beginShutdown, drain } from './queue.js';
 import { startScheduler, stopScheduler } from './scheduler.js';
+import { getAuthConfig, pruneSessions } from './store/auth.js';
 import { failOrphanedRuns, pruneOldRuns } from './store/runs.js';
+import { authRoutes } from './routes/auth.js';
 import { chatRoutes } from './routes/chats.js';
 import { goalRoutes } from './routes/goals.js';
 import { mcpRoutes } from './routes/mcp.js';
@@ -19,21 +21,6 @@ import { streamRoutes } from './routes/stream.js';
 import { systemRoutes } from './routes/system.js';
 import { triggerRoutes } from './routes/triggers.js';
 
-/**
- * The token gates the API, not the static shell. Serving index.html and its
- * assets unauthenticated costs nothing — they hold no data — and it is the only
- * way the user can reach the dialog that asks for the token.
- */
-function requiresAuth(url: string): boolean {
-  return (url.split('?')[0] ?? '').startsWith('/api/');
-}
-
-function tokenMatches(provided: string): boolean {
-  const expected = Buffer.from(config.authToken);
-  const actual = Buffer.from(provided);
-  return expected.length === actual.length && timingSafeEqual(expected, actual);
-}
-
 async function buildServer() {
   const app = Fastify({
     logger: false,
@@ -41,24 +28,27 @@ async function buildServer() {
     trustProxy: true,
   });
 
-  if (config.authToken) {
-    app.addHook('onRequest', async (request, reply) => {
-      if (!requiresAuth(request.url)) return;
+  /**
+   * Authentication gates the API, not the static shell. Serving index.html and
+   * its assets unauthenticated costs nothing — they hold no data — and it is the
+   * only way somebody can reach the login screen at all.
+   */
+  app.addHook('onRequest', async (request, reply) => {
+    if (isPublicPath(request.url)) return;
 
-      const header = request.headers.authorization ?? '';
-      const bearer = header.startsWith('Bearer ') ? header.slice(7) : '';
-      // EventSource cannot set headers, so the stream endpoint also accepts ?token=.
-      const queryToken =
-        typeof (request.query as Record<string, unknown>)?.token === 'string'
-          ? ((request.query as Record<string, string>).token as string)
-          : '';
-      const provided = bearer || queryToken;
+    const outcome = await authenticate(request);
+    if (outcome.allowed) return;
 
-      if (!provided || !tokenMatches(provided)) {
-        return reply.code(401).send({ error: 'Unauthorized' });
-      }
+    // Only once the real check has failed, so "on the LAN" can never be
+    // mistaken for "authenticated" when both would have passed.
+    if (localBypassApplies(request)) return;
+
+    if (outcome.challenge) reply.header('www-authenticate', 'Basic realm="KubeClaude"');
+    return reply.code(401).send({
+      error: outcome.setupRequired ? 'This instance has no password set yet' : 'Unauthorized',
+      setupRequired: outcome.setupRequired,
     });
-  }
+  });
 
   app.setErrorHandler((error: FastifyError, request, reply) => {
     logger.error({ err: error.message, url: request.url, stack: error.stack }, 'request failed');
@@ -66,6 +56,7 @@ async function buildServer() {
     reply.code(status).send({ error: status === 500 ? 'Internal server error' : error.message });
   });
 
+  await app.register(authRoutes);
   await app.register(systemRoutes);
   await app.register(promptRoutes);
   await app.register(triggerRoutes);
@@ -101,6 +92,25 @@ async function main(): Promise<void> {
   const pruned = pruneOldRuns(config.runRetentionDays);
   if (pruned > 0) logger.info({ count: pruned }, 'pruned old runs');
 
+  const staleSessions = pruneSessions();
+  if (staleSessions > 0) logger.info({ count: staleSessions }, 'pruned expired sessions');
+
+  const auth = effectiveMethod();
+  const authConfig = getAuthConfig();
+  if (auth.method === 'none' && !config.authToken) {
+    logger.warn(
+      {},
+      'authentication is off: anyone who can reach this port can run Claude with whatever access it has',
+    );
+  } else if (auth.method !== 'none' && auth.method !== 'external' && !authConfig.configured) {
+    logger.info({}, 'no password set yet: the UI will ask for one on first visit');
+  } else {
+    logger.info(
+      { method: auth.method, requirement: authConfig.requirement, pinned: auth.locked },
+      'authentication configured',
+    );
+  }
+
   if (!hasCredentials()) {
     logger.warn(
       {},
@@ -120,6 +130,7 @@ async function main(): Promise<void> {
     () => {
       const count = pruneOldRuns(config.runRetentionDays);
       if (count > 0) logger.info({ count }, 'pruned old runs');
+      pruneSessions();
     },
     24 * 3_600_000,
   );
