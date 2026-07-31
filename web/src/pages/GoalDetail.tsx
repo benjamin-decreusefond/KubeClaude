@@ -102,7 +102,10 @@ export function GoalDetail() {
           )}
           <button
             className="primary"
-            disabled={busy || running}
+            // Only an active goal has anything read its report, so iterating a
+            // paused one would spend tokens on findings nobody collects.
+            disabled={busy || running || goal.status !== 'active'}
+            title={goal.status !== 'active' ? 'Resume the goal before iterating it' : undefined}
             onClick={() => void act(() => api.iterateGoal(goal.id))}
           >
             {running ? 'Iterating…' : 'Iterate now'}

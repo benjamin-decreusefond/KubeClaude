@@ -77,6 +77,28 @@ export function activeRunCount(): number {
   return inFlight.size;
 }
 
+/**
+ * Stop whatever this prompt is doing, before it is deleted.
+ *
+ * Without this the Claude process carries on against a prompt that no longer
+ * exists — spending quota on work nobody will ever read, and writing output
+ * into a run row that has been cascaded away.
+ */
+export function cancelRunsForPrompt(promptId: string): number {
+  let stopped = 0;
+  for (const [runId, controller] of inFlight) {
+    if (runs.getRun(runId)?.promptId !== promptId) continue;
+    controller.abort();
+    stopped += 1;
+  }
+  for (const run of runs.listQueuedRuns()) {
+    if (run.promptId !== promptId) continue;
+    finish(run.id, 'cancelled', { error: 'Cancelled before it started' });
+    stopped += 1;
+  }
+  return stopped;
+}
+
 /** Start as many queued runs as the concurrency limit and quota guard allow. */
 export async function drain(): Promise<void> {
   if (draining || shuttingDown) return;
@@ -150,8 +172,10 @@ async function execute(run: Run): Promise<void> {
         prompt.completionCheck === 'marker' ? markerInstruction(markerFor(prompt)) : undefined,
       signal: controller.signal,
       onEvent: (kind, payload) => {
+        // Null once the run has been deleted out from under a Claude that is
+        // still talking; there is nobody left to tell.
         const event = runs.appendEvent(run.id, kind, payload);
-        bus.emit('run:event', event);
+        if (event) bus.emit('run:event', event);
       },
     });
 

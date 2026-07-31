@@ -156,7 +156,11 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     }
     const input = parsed.data;
 
-    await authStore.setPassword(input.password);
+    // Conditional on there still being no password, so two people setting up
+    // the same fresh instance cannot both succeed with the second one winning.
+    if (!(await authStore.initialisePassword(input.password))) {
+      return reply.code(409).send({ error: 'This instance is already set up' });
+    }
     authStore.updateAuthConfig({
       username: input.username.trim(),
       // Storing a method the environment overrides would only be misleading:

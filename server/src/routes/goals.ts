@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { iterationReportInstruction, isAchieved, startIteration } from '../goals.js';
-import { cancelRun } from '../queue.js';
+import { cancelRun, cancelRunsForPrompt } from '../queue.js';
 import * as goalStore from '../store/goals.js';
 import * as promptStore from '../store/prompts.js';
 import * as runStore from '../store/runs.js';
@@ -185,7 +185,9 @@ export async function goalRoutes(app: FastifyInstance): Promise<void> {
     const { id } = idParams.parse(request.params);
     const goal = goalStore.getGoal(id);
     if (!goal) return reply.code(404).send({ error: 'Goal not found' });
-    // The prompt exists only to serve the goal, and its runs go with it.
+    // The prompt exists only to serve the goal, and its runs go with it — but
+    // an iteration that is running has to be stopped before any of that.
+    cancelRunsForPrompt(goal.promptId);
     promptStore.deletePrompt(goal.promptId);
     goalStore.deleteGoal(id);
     return reply.code(204).send();
@@ -223,6 +225,12 @@ export async function goalRoutes(app: FastifyInstance): Promise<void> {
     const { id } = idParams.parse(request.params);
     const goal = goalStore.getGoal(id);
     if (!goal) return reply.code(404).send({ error: 'Goal not found' });
+    // Only the loop reads an iteration's report, and the loop leaves anything
+    // that is not active alone — so an iteration started here would run, cost
+    // tokens, and have its findings thrown away.
+    if (goal.status !== 'active') {
+      return reply.code(409).send({ error: 'Resume the goal before iterating it' });
+    }
     const run = startIteration(goal, 'goal:manual');
     if (!run) {
       return reply.code(409).send({ error: 'An iteration is already running' });

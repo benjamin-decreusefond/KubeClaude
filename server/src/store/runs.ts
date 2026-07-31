@@ -250,30 +250,54 @@ export function updateRun(id: string, patch: Partial<Run>): Run | null {
   return getRun(id);
 }
 
-/** Any run left mid-flight by a pod restart is not recoverable; mark it failed. */
+/**
+ * Marks a run the process could not finish because it was restarted under it.
+ * Kept apart from a real failure: a pod restart is a routine event — a deploy,
+ * a node drain — and counting it as the task failing would stop goals that are
+ * doing nothing wrong.
+ */
+export const RESTART_REASON = 'restart';
+
+/** Any run left mid-flight by a pod restart is not recoverable; close it out. */
 export function failOrphanedRuns(): number {
   const now = new Date().toISOString();
   return db
     .prepare(
-      `UPDATE runs SET status = 'failed', finished_at = ?, error = 'Interrupted by a KubeClaude restart'
+      `UPDATE runs SET status = 'failed', finished_at = ?, error = 'Interrupted by a KubeClaude restart',
+         completion_reason = ?
        WHERE status = 'running'`,
     )
-    .run(now).changes;
+    .run(now, RESTART_REASON).changes;
 }
 
-export function appendEvent(runId: string, kind: RunEvent['kind'], payload: unknown): RunEvent {
+/**
+ * Record one line of a run's output.
+ *
+ * Returns null when the run is no longer there — deleting a prompt, a chat or a
+ * goal takes its runs with it, and the Claude process behind one of them can
+ * still be mid-sentence. This is called from a stream handler, so throwing here
+ * would take down the whole server rather than the one run that went away.
+ */
+export function appendEvent(runId: string, kind: RunEvent['kind'], payload: unknown): RunEvent | null {
   const row = db
     .prepare<[string], { next: number }>('SELECT COALESCE(MAX(seq), 0) + 1 AS next FROM run_events WHERE run_id = ?')
     .get(runId);
   const seq = row?.next ?? 1;
   const ts = new Date().toISOString();
-  db.prepare('INSERT INTO run_events (run_id, seq, ts, kind, payload) VALUES (?, ?, ?, ?, ?)').run(
-    runId,
-    seq,
-    ts,
-    kind,
-    JSON.stringify(payload ?? null),
-  );
+  try {
+    db.prepare('INSERT INTO run_events (run_id, seq, ts, kind, payload) VALUES (?, ?, ?, ?, ?)').run(
+      runId,
+      seq,
+      ts,
+      kind,
+      JSON.stringify(payload ?? null),
+    );
+  } catch (error) {
+    // A foreign key failure means the run was deleted; anything else is a real
+    // problem worth surfacing.
+    if (!String(error).includes('FOREIGN KEY')) throw error;
+    return null;
+  }
   if (seq % 500 === 0) trimEvents(runId);
   return { runId, seq, ts, kind, payload };
 }
@@ -304,7 +328,17 @@ export function listEvents(runId: string, afterSeq = 0): RunEvent[] {
 export function pruneOldRuns(retentionDays: number): number {
   if (retentionDays <= 0) return 0;
   const cutoff = new Date(Date.now() - retentionDays * 86_400_000).toISOString();
-  return db
+  const removed = db
     .prepare("DELETE FROM runs WHERE queued_at < ? AND status NOT IN ('queued', 'running', 'rate_limited')")
     .run(cutoff).changes;
+
+  // A goal's progress log outlives the runs behind it, and a link to a run that
+  // was pruned is a dead end. The entry stays — it is the record of what
+  // happened — but it stops offering to show a run that is gone.
+  if (removed > 0) {
+    db.prepare(
+      'UPDATE goal_iterations SET run_id = NULL WHERE run_id IS NOT NULL AND run_id NOT IN (SELECT id FROM runs)',
+    ).run();
+  }
+  return removed;
 }
