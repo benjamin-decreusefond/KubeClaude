@@ -161,6 +161,53 @@ const MIGRATIONS: Array<{ name: string; up: string }> = [
       CREATE INDEX idx_prompts_kind ON prompts(kind, updated_at DESC);
     `,
   },
+  {
+    name: '003_goals',
+    up: `
+      /*
+       * A goal owns a prompt (kind 'goal') and drives it in a loop: the prompt
+       * holds the model, the tools and the session, the goal holds the
+       * objectives and the progress. Deleting the goal deletes the prompt with
+       * it, which is why the FK sits on this side.
+       */
+      CREATE TABLE goals (
+        id TEXT PRIMARY KEY,
+        prompt_id TEXT NOT NULL REFERENCES prompts(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        objectives TEXT NOT NULL DEFAULT '[]',
+        status TEXT NOT NULL DEFAULT 'active',
+        cadence_minutes INTEGER NOT NULL DEFAULT 30,
+        max_iterations INTEGER NOT NULL DEFAULT 0,
+        iteration INTEGER NOT NULL DEFAULT 0,
+        stop_when_achieved INTEGER NOT NULL DEFAULT 1,
+        review_model TEXT,
+        last_run_id TEXT,
+        last_iteration_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE UNIQUE INDEX idx_goals_prompt ON goals(prompt_id);
+      CREATE INDEX idx_goals_status ON goals(status, updated_at DESC);
+
+      /* The progress log: one row per finished iteration, oldest first. */
+      CREATE TABLE goal_iterations (
+        id TEXT PRIMARY KEY,
+        goal_id TEXT NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+        seq INTEGER NOT NULL,
+        run_id TEXT,
+        created_at TEXT NOT NULL,
+        summary TEXT NOT NULL DEFAULT '',
+        next_step TEXT,
+        achieved TEXT NOT NULL DEFAULT '[]',
+        source TEXT NOT NULL DEFAULT 'none',
+        run_status TEXT
+      );
+      CREATE INDEX idx_goal_iterations ON goal_iterations(goal_id, seq);
+      /* A run is reviewed exactly once, however often the sweep sees it. */
+      CREATE UNIQUE INDEX idx_goal_iterations_run ON goal_iterations(run_id) WHERE run_id IS NOT NULL;
+    `,
+  },
 ];
 
 export function migrate(): void {

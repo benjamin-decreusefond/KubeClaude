@@ -34,7 +34,7 @@ export interface CompletionSubject {
 }
 
 /** Assistant text from a run, newest last, capped so a judge call stays cheap. */
-function transcriptOf(run: CompletionSubject, maxChars = 12_000): string {
+export function transcriptOf(run: CompletionSubject, maxChars = 12_000): string {
   const parts: string[] = [];
   for (const event of listEvents(run.runId)) {
     if (event.kind !== 'message') continue;

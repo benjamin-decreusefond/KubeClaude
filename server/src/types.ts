@@ -38,8 +38,9 @@ export type CompletionCheck =
  * `scheduled` prompts are the ones you define once and let triggers fire.
  * `chat` prompts are conversations you start directly and keep talking to;
  * they run through exactly the same machinery.
+ * `goal` prompts are owned by a goal and driven by its loop, never by a trigger.
  */
-export type PromptKind = 'scheduled' | 'chat';
+export type PromptKind = 'scheduled' | 'chat' | 'goal';
 
 export interface Prompt {
   id: string;
@@ -248,6 +249,82 @@ export interface McpServer {
   config: string;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * A goal runs by itself until its objectives are met. `active` is the working
+ * state; `paused` is a human holding it; `achieved` and `abandoned` are ends —
+ * one because everything was ticked off, the other because it ran out of
+ * iterations or its session became unusable.
+ */
+export type GoalStatus = 'active' | 'paused' | 'achieved' | 'abandoned';
+
+/** One thing the goal has to accomplish, ticked off as the work lands. */
+export interface Objective {
+  /** Short and stable (`o1`, `o2`, …) so the model can name it back to us. */
+  id: string;
+  text: string;
+  done: boolean;
+  doneAt: string | null;
+  /** How it came to be done: the model's own words, or "marked by hand". */
+  note: string | null;
+}
+
+/**
+ * A standing objective set with a session behind it. Where a prompt answers
+ * "run this now", a goal answers "keep working on this until it is true":
+ * every iteration resumes the same Claude session, reads what the last one
+ * achieved, does the next most valuable thing, and reports back.
+ */
+export interface Goal {
+  id: string;
+  /** The prompt that carries the configuration and the session; kind `goal`. */
+  promptId: string;
+  name: string;
+  /** The mission: what "done" looks like, in prose. */
+  description: string;
+  objectives: Objective[];
+  status: GoalStatus;
+  /** Minimum wait between the end of one iteration and the start of the next. */
+  cadenceMinutes: number;
+  /** Give up after this many iterations; 0 means keep going indefinitely. */
+  maxIterations: number;
+  /** How many iterations have been started so far. */
+  iteration: number;
+  /**
+   * Stop at `achieved` once every objective is ticked. Turning this off is what
+   * makes a goal open-ended: it keeps iterating and improving past the checklist.
+   */
+  stopWhenAchieved: boolean;
+  /**
+   * Model asked to review an iteration whose report could not be parsed. Null
+   * means never spend a second call: an unparseable report just carries forward.
+   */
+  reviewModel: string | null;
+  /** The iteration currently running, or the last one that ran. */
+  lastRunId: string | null;
+  lastIterationAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** What one iteration achieved, as recorded once its run finished. */
+export interface GoalIteration {
+  id: string;
+  goalId: string;
+  seq: number;
+  runId: string | null;
+  createdAt: string;
+  /** What the iteration did, in its own words. */
+  summary: string;
+  /** What it says should happen next; fed into the following iteration. */
+  nextStep: string | null;
+  /** Objectives this iteration ticked off. */
+  achieved: string[];
+  /** How the summary was obtained: the run's own report, a judge, or neither. */
+  source: 'report' | 'judge' | 'none';
+  /** Status of the run behind it, so a stalled loop is visible in the log. */
+  runStatus: string | null;
 }
 
 /** Per-model slice of a run's usage, as reported in `modelUsage`. */
