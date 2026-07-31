@@ -208,6 +208,43 @@ const MIGRATIONS: Array<{ name: string; up: string }> = [
       CREATE UNIQUE INDEX idx_goal_iterations_run ON goal_iterations(run_id) WHERE run_id IS NOT NULL;
     `,
   },
+  {
+    name: '004_auth',
+    up: `
+      /*
+       * One row, id 1. There is a single operator account: this is a tool you
+       * run for yourself, and a user table would imply roles that do not exist.
+       */
+      CREATE TABLE auth_config (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        method TEXT NOT NULL DEFAULT 'forms',
+        requirement TEXT NOT NULL DEFAULT 'always',
+        external_user_header TEXT NOT NULL DEFAULT 'X-Forwarded-User',
+        username TEXT NOT NULL DEFAULT '',
+        /* scrypt, with its parameters and salt encoded alongside the digest. */
+        password_hash TEXT,
+        /* Hashed like a password would be: a leaked backup must not hand it over. */
+        api_key_hash TEXT,
+        session_days INTEGER NOT NULL DEFAULT 30,
+        updated_at TEXT NOT NULL
+      );
+
+      /*
+       * Sessions live in the database rather than in a signed cookie so that
+       * signing out, changing the password, or switching auth method can revoke
+       * them for real.
+       */
+      CREATE TABLE auth_sessions (
+        /* SHA-256 of the cookie value; the value itself is never stored. */
+        token_hash TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        last_seen_at TEXT NOT NULL,
+        user_agent TEXT
+      );
+      CREATE INDEX idx_auth_sessions_expiry ON auth_sessions(expires_at);
+    `,
+  },
 ];
 
 export function migrate(): void {

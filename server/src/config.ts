@@ -38,8 +38,18 @@ export const config = {
   /** Runs older than this are pruned on startup and daily. 0 disables pruning. */
   runRetentionDays: int('RUN_RETENTION_DAYS', 30),
 
-  /** Optional bearer token protecting the API and UI. */
+  /**
+   * Optional static token, accepted as a bearer token or `X-Api-Key`. It exists
+   * for deployments that configure everything through the environment; the API
+   * key generated at setup does the same job for everyone else.
+   */
   authToken: process.env.KUBECLAUDE_AUTH_TOKEN ?? '',
+  /**
+   * Pin the login method — `none`, `forms`, `basic` or `external`. Set it and
+   * the UI shows the choice as locked, so a cluster that puts this behind an
+   * oauth2-proxy cannot have that turned off from inside the app.
+   */
+  authMethod: process.env.AUTH_METHOD ?? '',
   /**
    * Let runs talk to the Kubernetes API with the pod's ServiceAccount.
    * kubectl builds its in-cluster config from KUBERNETES_SERVICE_HOST/PORT, so

@@ -16,6 +16,42 @@ export type CompletionCheck = 'marker' | 'judge' | 'always' | 'never';
 
 export type PromptKind = 'scheduled' | 'chat' | 'goal';
 
+export type AuthMethod = 'none' | 'forms' | 'basic' | 'external';
+
+export type AuthRequirement = 'always' | 'local_bypass';
+
+export interface AuthState {
+  method: AuthMethod;
+  setupRequired: boolean;
+  authenticated: boolean;
+  username: string | null;
+  via: 'session' | 'basic' | 'proxy' | 'api-key' | 'local' | 'open' | null;
+  /** Pinned by AUTH_METHOD in the environment, so the app cannot change it. */
+  locked: boolean;
+  local: boolean;
+}
+
+export interface AuthConfig {
+  method: AuthMethod;
+  requirement: AuthRequirement;
+  externalUserHeader: string;
+  username: string;
+  configured: boolean;
+  sessionDays: number;
+  updatedAt: string;
+  locked: boolean;
+  hasApiKey: boolean;
+  staticTokenConfigured: boolean;
+  activeSessions: number;
+}
+
+export interface SetupInput {
+  username: string;
+  password: string;
+  method: AuthMethod;
+  requirement: AuthRequirement;
+}
+
 export type GoalStatus = 'active' | 'paused' | 'achieved' | 'abandoned';
 
 export interface Objective {

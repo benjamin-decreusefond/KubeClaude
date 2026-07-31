@@ -1,4 +1,6 @@
 import type {
+  AuthConfig,
+  AuthState,
   Capabilities,
   ChatDetail,
   ChatSummary,
@@ -13,6 +15,7 @@ import type {
   Prompt,
   Run,
   RunEvent,
+  SetupInput,
   Settings,
   Status,
   Trigger,
@@ -23,9 +26,11 @@ import type {
 } from './types';
 
 /**
- * When the server is started with KUBECLAUDE_AUTH_TOKEN, the UI needs it too.
- * It is kept in localStorage and sent as a bearer token, or as ?token= on the
- * SSE endpoint, which cannot carry headers.
+ * An API key or the static KUBECLAUDE_AUTH_TOKEN, for the cases where a cookie
+ * cannot do the job: a protected instance being set up for the first time, or a
+ * browser talking to an instance that only accepts machine credentials. Kept in
+ * localStorage and sent as a bearer token, or as ?token= on the SSE endpoint,
+ * which cannot carry headers. Normal sessions do not need it.
  */
 const TOKEN_KEY = 'kubeclaude.token';
 
@@ -68,6 +73,29 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
+  authState: () => request<AuthState>('/api/auth/state'),
+  setupAuth: (input: SetupInput) =>
+    request<AuthState & { apiKey: string }>('/api/auth/setup', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  login: (username: string, password: string) =>
+    request<AuthState>('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    }),
+  logout: () => request<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }),
+  authConfig: () => request<AuthConfig>('/api/auth/config'),
+  updateAuthConfig: (patch: Partial<AuthConfig>) =>
+    request<AuthConfig>('/api/auth/config', { method: 'PATCH', body: JSON.stringify(patch) }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<{ ok: boolean }>('/api/auth/password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
+  rotateApiKey: () => request<{ apiKey: string }>('/api/auth/api-key', { method: 'POST' }),
+  revokeSessions: () => request<{ ok: boolean }>('/api/auth/sessions/revoke', { method: 'POST' }),
+
   status: () => request<Status>('/api/status'),
   capabilities: () => request<Capabilities>('/api/capabilities'),
   models: () => request<{ models: ModelOption[] }>('/api/models'),
