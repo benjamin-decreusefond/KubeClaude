@@ -70,6 +70,23 @@ export function updateAuthConfig(patch: AuthConfigPatch): AuthConfig {
 }
 
 /**
+ * Set the very first password, and only if there is not one already.
+ *
+ * First-run setup is the one moment this instance is open, and hashing takes
+ * long enough that two requests can both pass a "is it configured?" check
+ * before either has written. Deciding it in SQL means exactly one of them wins,
+ * and the other is told the instance is already set up.
+ */
+export async function initialisePassword(password: string): Promise<boolean> {
+  const hash = await hashSecret(password);
+  row();
+  const result = db
+    .prepare('UPDATE auth_config SET password_hash = ?, updated_at = ? WHERE id = 1 AND password_hash IS NULL')
+    .run(hash, new Date().toISOString());
+  return result.changes > 0;
+}
+
+/**
  * Set the password. Every existing session goes with it: a password is changed
  * either because it might be known, or because somebody should be locked out.
  */

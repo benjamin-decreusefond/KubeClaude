@@ -319,9 +319,9 @@ How it ends:
 |---|---|
 | Every objective ticked | `achieved`, unless you turned off "stop when achieved" — then it keeps iterating and improving. |
 | Iteration limit reached | `abandoned`. Resuming lifts the limit. |
-| Three failed or timed-out iterations in a row | Paused automatically. Something is wrong with the setup, and looping would spend the budget reproducing it. |
+| Three failed or timed-out iterations in a row | Paused automatically. Something is wrong with the setup, and looping would spend the budget reproducing it. A restart of KubeClaude itself does **not** count — a deploy or a node drain is not the task failing, and a goal that ships anything would otherwise stop itself after three of its own deployments. |
 | Quota ran out mid-iteration | Nothing special: the run parks as `rate_limited` and auto-resume finishes that iteration before the loop moves on. |
-| You pause it | The loop leaves it alone, and any iteration in flight is cancelled. |
+| You pause it | The loop leaves it alone, and any iteration in flight is cancelled. Nothing reads an iteration's report while it is paused, so "Iterate now" is refused until you resume it. |
 
 A goal owns its own prompt — same runner, same quota accounting, same live output — so
 every iteration is a normal run you can open, watch and replay. It does not appear in the

@@ -5,6 +5,7 @@ import { runOneShot } from './claude/runner.js';
 import * as goalStore from './store/goals.js';
 import { getPrompt } from './store/prompts.js';
 import * as runs from './store/runs.js';
+import { RESTART_REASON } from './store/runs.js';
 import { getQuotaState } from './store/usage.js';
 import type { Goal, GoalIteration, Objective, Run } from './types.js';
 
@@ -24,6 +25,14 @@ const REVIEWABLE: ReadonlySet<string> = new Set(['succeeded']);
 
 /** Statuses that mean the loop should stop rather than keep burning tokens. */
 const FATAL_RUN_STATUSES: ReadonlySet<string> = new Set(['failed', 'timeout']);
+
+/**
+ * What the log calls an iteration the process was restarted out of. Not one of
+ * the fatal statuses on purpose: a restart is a deploy or a node drain, not the
+ * task failing, and a goal that deploys anything would otherwise stop itself
+ * after three of its own deployments.
+ */
+const INTERRUPTED = 'interrupted';
 
 /** How many consecutive fruitless iterations are tolerated before giving up. */
 const MAX_CONSECUTIVE_FAILURES = 3;
@@ -259,14 +268,22 @@ export async function reviewIteration(goal: Goal, run: Run): Promise<Goal | null
     nextStep: report?.next ?? null,
     achieved,
     source,
-    runStatus: run.status,
+    runStatus: wasRestarted(run) ? INTERRUPTED : run.status,
   });
 
   const objectives = tickObjectives(goal.objectives, achieved, summary);
   return goalStore.updateGoal(goal.id, { objectives });
 }
 
+/** True when this run died because KubeClaude itself was restarted under it. */
+function wasRestarted(run: Run): boolean {
+  return run.status === 'failed' && run.completionReason === RESTART_REASON;
+}
+
 function fallbackSummary(run: Run): string {
+  if (wasRestarted(run)) {
+    return 'KubeClaude restarted while this iteration was running, so it stopped part-way. Nothing is known about what it had done.';
+  }
   if (run.status === 'succeeded') return 'The iteration finished without a readable report.';
   if (run.error) return `The iteration ended as ${run.status}: ${run.error}`;
   return `The iteration ended as ${run.status}.`;

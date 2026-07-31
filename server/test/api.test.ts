@@ -291,6 +291,14 @@ test('a goal can be paused, resumed and iterated on demand', async () => {
   assert.deepEqual(view.iterations, []);
 });
 
+test('a goal that is not running refuses to be iterated by hand', async () => {
+  // Only the loop reads a report, and the loop leaves a paused goal alone — so
+  // an iteration started here would spend tokens and be thrown away.
+  const refused = await kube.request({ method: 'POST', url: `/api/goals/${goalId}/iterate` });
+  assert.equal(refused.status, 409);
+  assert.match(refused.json<{ error: string }>().error, /Resume the goal/);
+});
+
 test('deleting a goal takes its prompt and its runs with it', async () => {
   const before = await kube.request({ method: 'GET', url: '/api/runs?limit=100' });
   const runsBefore = before.json<{ total: number }>().total;

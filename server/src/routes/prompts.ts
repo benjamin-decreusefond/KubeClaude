@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { enqueueRun } from '../queue.js';
+import { cancelRunsForPrompt, enqueueRun } from '../queue.js';
 import * as promptStore from '../store/prompts.js';
 import * as triggerStore from '../store/triggers.js';
 import { listRuns } from '../store/runs.js';
@@ -70,7 +70,11 @@ export async function promptRoutes(app: FastifyInstance): Promise<void> {
 
   app.delete('/api/prompts/:id', async (request, reply) => {
     const { id } = idParams.parse(request.params);
-    if (!promptStore.deletePrompt(id)) return reply.code(404).send({ error: 'Prompt not found' });
+    if (!promptStore.getPrompt(id)) return reply.code(404).send({ error: 'Prompt not found' });
+    // Stop the work before removing what it belongs to: deleting the rows under
+    // a live Claude leaves it writing output nobody can read.
+    cancelRunsForPrompt(id);
+    promptStore.deletePrompt(id);
     return reply.code(204).send();
   });
 

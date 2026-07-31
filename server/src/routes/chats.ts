@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { cancelRun, enqueueRun } from '../queue.js';
+import { cancelRun, cancelRunsForPrompt, enqueueRun } from '../queue.js';
 import * as promptStore from '../store/prompts.js';
 import * as runStore from '../store/runs.js';
 import { permissionModeSchema } from './schemas.js';
@@ -182,6 +182,8 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
     const { id } = idParams.parse(request.params);
     const chat = promptStore.getPrompt(id);
     if (!chat || chat.kind !== 'chat') return reply.code(404).send({ error: 'Chat not found' });
+    // A conversation can be deleted mid-reply; stop the reply first.
+    cancelRunsForPrompt(id);
     promptStore.deletePrompt(id);
     return reply.code(204).send();
   });
