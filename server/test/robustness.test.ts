@@ -27,6 +27,7 @@ const promptStore = await import('../src/store/prompts.js');
 const runStore = await import('../src/store/runs.js');
 const goalStore = await import('../src/store/goals.js');
 const authStore = await import('../src/store/auth.js');
+const mcpStore = await import('../src/store/mcp.js');
 const { enqueueRun, cancelRunsForPrompt, activeRunCount } = await import('../src/queue.js');
 const { reviewIteration } = await import('../src/goals.js');
 import type { Prompt } from '../src/types.js';
@@ -189,6 +190,72 @@ test('a restart mid-iteration is not held against a goal', async () => {
   // deploys in a row must not pause a goal that is doing nothing wrong.
   assert.equal(entry?.runStatus, 'interrupted');
   assert.match(entry?.summary ?? '', /restarted/i);
+});
+
+test('an objective added while an iteration is being reviewed is not lost', async () => {
+  const prompt = makePrompt({ kind: 'goal', name: 'goal-race', completionCheck: 'always' });
+  const goal = goalStore.createGoal({
+    promptId: prompt.id,
+    name: 'Race',
+    description: '',
+    objectives: goalStore.makeObjectives(['First thing']),
+    status: 'active',
+    cadenceMinutes: 0,
+    maxIterations: 0,
+    stopWhenAchieved: false,
+    reviewModel: null,
+  });
+
+  const run = runStore.createRun({
+    promptId: prompt.id,
+    promptName: prompt.name,
+    triggerId: null,
+    triggerType: 'goal',
+    promptText: 'work',
+  });
+  runStore.updateRun(run.id, {
+    status: 'succeeded',
+    resultText: 'PROGRESS: did the first thing.\nDONE: o1\nNEXT: the next thing',
+  });
+
+  // The loop is holding the goal as it read it a moment ago. An iteration takes
+  // minutes, and the UI invites you to add objectives while it works.
+  const asTheLoopSawIt = goalStore.getGoal(goal.id)!;
+  goalStore.updateGoal(goal.id, {
+    objectives: [
+      ...asTheLoopSawIt.objectives,
+      ...goalStore.makeObjectives(['Added while it was thinking'], asTheLoopSawIt.objectives),
+    ],
+  });
+
+  await reviewIteration(asTheLoopSawIt, runStore.getRun(run.id)!);
+
+  const after = goalStore.getGoal(goal.id)!;
+  // Both survive: the tick from the iteration, and the objective a person added
+  // in the meantime. Writing back the array the review started from would have
+  // erased the second, silently.
+  assert.equal(after.objectives.length, 2);
+  assert.equal(after.objectives.find((objective) => objective.id === 'o1')?.done, true);
+  assert.ok(after.objectives.some((objective) => objective.text === 'Added while it was thinking'));
+});
+
+test('deleting an MCP connection stops prompts claiming they still have it', () => {
+  const server = mcpStore.createMcpServer({
+    name: 'doomed',
+    description: '',
+    enabled: true,
+    config: JSON.stringify({ type: 'sse', url: 'https://mcp.example/sse' }),
+  });
+  const user = makePrompt({ mcpServerIds: [server.id] });
+  const bystander = makePrompt({ mcpServerIds: [] });
+
+  assert.equal(mcpStore.deleteMcpServer(server.id), true);
+
+  // A run would have skipped the missing connection anyway; the point is that
+  // the prompt stops advertising one that no longer exists.
+  assert.deepEqual(promptStore.getPrompt(user.id)?.mcpServerIds, []);
+  assert.deepEqual(promptStore.getPrompt(bystander.id)?.mcpServerIds, []);
+  assert.equal(mcpStore.buildMcpDocument([server.id], null), null);
 });
 
 test('pruning runs leaves the progress log readable rather than pointing at nothing', () => {

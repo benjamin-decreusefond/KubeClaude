@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { TriggerConfig, TriggerType } from '../types.js';
 
 const envRecord = z.record(z.string(), z.string());
 
@@ -58,6 +59,26 @@ export const promptUpdateSchema = promptCreateSchema.partial().extend({
   lastSessionId: z.string().nullable().optional(),
 });
 
+/**
+ * A timezone the platform actually knows. Storing one it does not means the
+ * trigger throws on every scheduler tick and never fires — a silent failure
+ * that only shows up as a line in the log nobody is reading.
+ */
+export const timezoneSchema = z
+  .string()
+  .max(80)
+  .refine(
+    (value) => {
+      try {
+        new Intl.DateTimeFormat('en-US', { timeZone: value });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    { message: 'Unknown timezone. Use an IANA name such as Europe/Paris.' },
+  );
+
 export const triggerConfigSchema = z.object({
   intervalMinutes: z.number().int().positive().max(100_000).optional(),
   minSessionTokensAvailable: z.number().int().min(0).optional(),
@@ -80,7 +101,7 @@ export const triggerCreateSchema = z
     type: triggerTypeSchema,
     enabled: z.boolean().default(true),
     cronExpression: z.string().max(200).nullable().default(null),
-    timezone: z.string().max(80).default('UTC'),
+    timezone: timezoneSchema.default('UTC'),
     config: triggerConfigSchema.default({}),
   })
   .refine((value) => value.type !== 'cron' || Boolean(value.cronExpression?.trim()), {
@@ -96,9 +117,25 @@ export const triggerUpdateSchema = z.object({
   type: triggerTypeSchema.optional(),
   enabled: z.boolean().optional(),
   cronExpression: z.string().max(200).nullable().optional(),
-  timezone: z.string().max(80).optional(),
+  timezone: timezoneSchema.optional(),
   config: triggerConfigSchema.optional(),
 });
+
+/**
+ * What a trigger of this type needs before it can fire at all. An edit merges
+ * with what is already stored, so this cannot live in the schema the way the
+ * create rules do — but the answer has to be the same either way, or a trigger
+ * can be edited into a state it could never have been created in.
+ */
+export function triggerRequirement(
+  type: TriggerType,
+  cronExpression: string | null,
+  config: TriggerConfig,
+): string | null {
+  if (type === 'cron' && !cronExpression?.trim()) return 'cron triggers need a cron expression';
+  if (type === 'interval' && !config.intervalMinutes) return 'interval triggers need config.intervalMinutes';
+  return null;
+}
 
 export const settingsUpdateSchema = z.object({
   sessionWindowHours: z.number().min(0.5).max(168).optional(),

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { boolFromDb, boolToDb, db } from '../db.js';
+import { boolFromDb, boolToDb, db, jsonFromDb } from '../db.js';
 import type { McpServer } from '../types.js';
 
 interface McpRow {
@@ -69,8 +69,30 @@ export function updateMcpServer(id: string, patch: Partial<McpServerInput>): Mcp
   return getMcpServer(id);
 }
 
+/**
+ * Remove a connection, and the references to it.
+ *
+ * A run skips a connection it cannot find, so a stale id is harmless at run
+ * time — but the prompt goes on claiming an MCP connection that does not
+ * exist, which is a lie the editor and the prompt list both repeat.
+ */
 export function deleteMcpServer(id: string): boolean {
-  return db.prepare('DELETE FROM mcp_servers WHERE id = ?').run(id).changes > 0;
+  return db.transaction(() => {
+    const removed = db.prepare('DELETE FROM mcp_servers WHERE id = ?').run(id).changes > 0;
+    if (!removed) return false;
+
+    const holders = db
+      .prepare<[string], { id: string; mcp_server_ids: string }>(
+        "SELECT id, mcp_server_ids FROM prompts WHERE mcp_server_ids LIKE '%' || ? || '%'",
+      )
+      .all(id);
+    const update = db.prepare('UPDATE prompts SET mcp_server_ids = ?, updated_at = ? WHERE id = ?');
+    for (const holder of holders) {
+      const ids = jsonFromDb<string[]>(holder.mcp_server_ids, []).filter((held) => held !== id);
+      update.run(JSON.stringify(ids), new Date().toISOString(), holder.id);
+    }
+    return true;
+  })();
 }
 
 /**

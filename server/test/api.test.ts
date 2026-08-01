@@ -165,6 +165,63 @@ test('triggers are created under their prompt and validated by type', async () =
   assert.equal((await kube.request({ method: 'DELETE', url: `/api/triggers/${trigger.id}` })).status, 204);
 });
 
+test('a trigger cannot be edited into a state where it would never fire', async () => {
+  const created = await kube.request({
+    method: 'POST',
+    url: `/api/prompts/${promptId}/triggers`,
+    payload: { type: 'interval', config: { intervalMinutes: 30 } },
+  });
+  const trigger = created.json<{ id: string }>();
+
+  // Creating one of these is refused, so editing into the same shape has to be
+  // too — otherwise the trigger sits in the list looking scheduled and does
+  // nothing, with nothing to say why.
+  for (const payload of [
+    { type: 'interval', config: {} },
+    { type: 'interval', config: { minIntervalMinutes: 5 } },
+    { type: 'cron', cronExpression: '   ' },
+  ]) {
+    const response = await kube.request({
+      method: 'PATCH',
+      url: `/api/triggers/${trigger.id}`,
+      payload,
+    });
+    assert.equal(response.status, 400, JSON.stringify(payload));
+  }
+
+  // A timezone the platform does not know throws on every scheduler tick and
+  // fires never; it is refused where it is written instead.
+  const badZone = await kube.request({
+    method: 'PATCH',
+    url: `/api/triggers/${trigger.id}`,
+    payload: { type: 'cron', cronExpression: '0 9 * * *', timezone: 'Mars/Olympus' },
+  });
+  assert.equal(badZone.status, 400);
+
+  const onCreate = await kube.request({
+    method: 'POST',
+    url: `/api/prompts/${promptId}/triggers`,
+    payload: { type: 'cron', cronExpression: '0 9 * * *', timezone: 'Mars/Olympus' },
+  });
+  assert.equal(onCreate.status, 400);
+
+  // The trigger kept the configuration it had, so a refused edit costs nothing.
+  const stored = await kube.request({ method: 'GET', url: `/api/prompts/${promptId}/triggers` });
+  const [current] = stored.json<Array<{ type: string; config: { intervalMinutes?: number } }>>();
+  assert.equal(current?.type, 'interval');
+  assert.equal(current?.config.intervalMinutes, 30);
+
+  // And a real timezone still goes through.
+  const good = await kube.request({
+    method: 'PATCH',
+    url: `/api/triggers/${trigger.id}`,
+    payload: { type: 'cron', cronExpression: '0 9 * * *', timezone: 'Europe/Paris' },
+  });
+  assert.equal(good.status, 200);
+
+  assert.equal((await kube.request({ method: 'DELETE', url: `/api/triggers/${trigger.id}` })).status, 204);
+});
+
 // --------------------------------------------------------------------------
 // Runs
 // --------------------------------------------------------------------------
