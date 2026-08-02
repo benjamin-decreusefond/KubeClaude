@@ -14,15 +14,30 @@ const FILTERS: Array<{ label: string; status?: RunStatus }> = [
   { label: 'Failed', status: 'failed' },
 ];
 
+/** Rows per page. The API caps a page at 500; this is what reads comfortably. */
+const PAGE_SIZE = 100;
+
 export function Runs() {
   const [status, setStatus] = useState<RunStatus | undefined>(undefined);
+  const [page, setPage] = useState(0);
   const now = useTicker(15_000);
 
   const { data, refresh } = usePolled<{ items: Run[]; total: number }>(
-    () => api.runs({ status, limit: 100 }),
+    () => api.runs({ status, limit: PAGE_SIZE, offset: page * PAGE_SIZE }),
     15_000,
-    [status],
+    [status, page],
   );
+
+  const choose = (next: RunStatus | undefined) => {
+    setStatus(next);
+    // Page 3 of "all" is not page 3 of "failed"; start the new filter at its top.
+    setPage(0);
+  };
+
+  const total = data?.total ?? 0;
+  const first = total === 0 ? 0 : page * PAGE_SIZE + 1;
+  const last = Math.min(total, (page + 1) * PAGE_SIZE);
+  const hasMore = last < total;
 
   useStream((event) => {
     if (event === 'run:updated' || event === 'run:created') refresh();
@@ -43,14 +58,22 @@ export function Runs() {
             key={filter.label}
             type="button"
             className={`tab${status === filter.status ? ' active' : ''}`}
-            onClick={() => setStatus(filter.status)}
+            onClick={() => choose(filter.status)}
           >
             {filter.label}
           </button>
         ))}
       </nav>
 
-      <Card subtitle={data ? `${data.total} run${data.total === 1 ? '' : 's'}` : undefined}>
+      <Card
+        subtitle={
+          data
+            ? total > PAGE_SIZE
+              ? `${first}–${last} of ${total} runs`
+              : `${total} run${total === 1 ? '' : 's'}`
+            : undefined
+        }
+      >
         {!data ? (
           <Empty>Loading…</Empty>
         ) : data.items.length === 0 ? (
@@ -90,6 +113,20 @@ export function Runs() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {data && total > PAGE_SIZE && (
+          <div className="row" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
+            <span className="stat-note">
+              Page {page + 1} of {Math.ceil(total / PAGE_SIZE)}
+            </span>
+            <button className="ghost small" disabled={page === 0} onClick={() => setPage((n) => n - 1)}>
+              Newer
+            </button>
+            <button className="ghost small" disabled={!hasMore} onClick={() => setPage((n) => n + 1)}>
+              Older
+            </button>
           </div>
         )}
       </Card>

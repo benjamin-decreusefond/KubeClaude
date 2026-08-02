@@ -298,9 +298,19 @@ export function appendEvent(runId: string, kind: RunEvent['kind'], payload: unkn
     if (!String(error).includes('FOREIGN KEY')) throw error;
     return null;
   }
-  if (seq % 500 === 0) trimEvents(runId);
+  // Trimming is batched rather than done on every line: the delete is cheap but
+  // it is still a write, and a chatty run produces thousands of lines. The batch
+  // is what makes the cap approximate — see TRIM_EVERY.
+  if (seq % TRIM_EVERY === 0) trimEvents(runId);
   return { runId, seq, ts, kind, payload };
 }
+
+/**
+ * How often the cap is enforced. A run therefore holds up to
+ * `maxEventsPerRun + TRIM_EVERY - 1` lines rather than exactly the cap; keeping
+ * this small is what stops that slack from being surprising.
+ */
+const TRIM_EVERY = 100;
 
 function trimEvents(runId: string): void {
   db.prepare(

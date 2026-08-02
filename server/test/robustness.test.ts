@@ -19,6 +19,7 @@ process.env.DATA_DIR = tmpDir;
 process.env.CLAUDE_BIN = path.join(here, 'fixtures', 'fake-claude.mjs');
 process.env.FORWARD_ENV_PREFIXES = 'FAKE_';
 process.env.MAX_CONCURRENT_RUNS = '1';
+process.env.MAX_EVENTS_PER_RUN = '50';
 
 fs.chmodSync(process.env.CLAUDE_BIN, 0o755);
 
@@ -298,4 +299,26 @@ test('pruning runs leaves the progress log readable rather than pointing at noth
   assert.equal(entry?.summary, 'Did something once');
   // The entry survives; the link to a run that no longer exists does not.
   assert.equal(entry?.runId, null);
+});
+
+test('a chatty run does not grow its event log without bound', () => {
+  const prompt = makePrompt();
+  const run = runStore.createRun({
+    promptId: prompt.id,
+    promptName: prompt.name,
+    triggerId: null,
+    triggerType: 'manual',
+    promptText: 'go',
+  });
+
+  // Well past the configured cap, which this file sets low.
+  for (let i = 0; i < 400; i += 1) runStore.appendEvent(run.id, 'message', { i });
+
+  const kept = runStore.listEvents(run.id);
+  // Trimming is batched, so the count settles near the cap rather than on it —
+  // what matters is that it settles at all rather than growing with the run.
+  assert.ok(kept.length <= 50 + 100, `kept ${kept.length} events`);
+  assert.ok(kept.length >= 50, `kept ${kept.length} events`);
+  // And it is the tail that survives: the end of a run is what anybody reads.
+  assert.equal(kept[kept.length - 1]?.seq, 400);
 });
