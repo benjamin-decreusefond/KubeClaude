@@ -177,6 +177,14 @@ export interface Prompt {
   allowedTools: string[];
   disallowedTools: string[];
   appendSystemPrompt: string | null;
+  /** Replaces the CLI's own system prompt, where the one above only adds to it. */
+  systemPrompt: string | null;
+  /** Custom subagents, as the JSON object `--agents` takes. */
+  agentsJson: string | null;
+  /** Which built-in tools exist: null the CLI's full set, [] none, else only these. */
+  builtinTools: string[] | null;
+  /** Settings files the CLI reads: `none`, or a subset of user, project, local. */
+  settingSources: string | null;
   maxTurns: number | null;
   timeoutSeconds: number;
   env: Record<string, string>;

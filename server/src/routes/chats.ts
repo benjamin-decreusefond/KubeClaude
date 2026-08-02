@@ -109,6 +109,10 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
       disallowedTools:
         input.disallowedTools.length > 0 ? input.disallowedTools : (source?.disallowedTools ?? []),
       appendSystemPrompt: source?.appendSystemPrompt ?? null,
+      systemPrompt: source?.systemPrompt ?? null,
+      agentsJson: source?.agentsJson ?? null,
+      builtinTools: source?.builtinTools ?? null,
+      settingSources: source?.settingSources ?? null,
       maxTurns: null,
       timeoutSeconds: input.timeoutSeconds,
       env: { ...(source?.env ?? {}), ...input.env },

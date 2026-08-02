@@ -56,6 +56,10 @@ const PROMPT_FIELDS = [
   'settingsJson',
   'claudeMd',
   'env',
+  'systemPrompt',
+  'agentsJson',
+  'builtinTools',
+  'settingSources',
   'maxTurns',
   'timeoutSeconds',
 ] as const;
@@ -100,6 +104,10 @@ export async function goalRoutes(app: FastifyInstance): Promise<void> {
       disallowedTools: input.disallowedTools,
       // How an iteration hands its state to the next one.
       appendSystemPrompt: iterationReportInstruction(),
+      systemPrompt: input.systemPrompt,
+      agentsJson: input.agentsJson,
+      builtinTools: input.builtinTools,
+      settingSources: input.settingSources,
       maxTurns: input.maxTurns,
       timeoutSeconds: input.timeoutSeconds,
       env: input.env,

@@ -418,6 +418,49 @@ test('a prompt with no model preferences inherits the global ones', async () => 
   }
 });
 
+test('what a run is made of reaches the CLI too', async () => {
+  const agents = JSON.stringify({ reviewer: { description: 'Reviews code', prompt: 'You review' } });
+  const prompt = makePrompt({
+    systemPrompt: 'You are a release engineer.',
+    agentsJson: agents,
+    builtinTools: ['Bash', 'Read'],
+    settingSources: 'user',
+    appendSystemPrompt: 'Only ever touch the media directory.',
+  });
+  await waitForTerminal(enqueueRun({ promptId: prompt.id, triggerType: 'manual' })!.id);
+
+  const { argv } = invocations()[0]!;
+  assert.equal(argv[argv.indexOf('--system-prompt') + 1], 'You are a release engineer.');
+  assert.equal(argv[argv.indexOf('--agents') + 1], agents);
+  assert.equal(argv[argv.indexOf('--tools') + 1], 'Bash,Read');
+  assert.equal(argv[argv.indexOf('--setting-sources') + 1], 'user');
+  // Replacing the system prompt does not throw away what KubeClaude appends:
+  // both flags travel together, and the prompt's own instruction survives.
+  assert.equal(
+    argv[argv.indexOf('--append-system-prompt') + 1],
+    'Only ever touch the media directory.',
+  );
+});
+
+test('an empty tool set and "no settings files" are passed, not skipped', async () => {
+  const prompt = makePrompt({ builtinTools: [], settingSources: 'none' });
+  await waitForTerminal(enqueueRun({ promptId: prompt.id, triggerType: 'manual' })!.id);
+
+  const { argv } = invocations()[0]!;
+  // An empty list is a decision — no built-in tools — not an absent value.
+  assert.equal(argv[argv.indexOf('--tools') + 1], '');
+  // 'none' is our spelling of "read nothing"; the CLI's is an empty string.
+  assert.equal(argv[argv.indexOf('--setting-sources') + 1], '');
+});
+
+test('a prompt left alone keeps the CLI defaults for all of it', async () => {
+  await waitForTerminal(enqueueRun({ promptId: makePrompt().id, triggerType: 'manual' })!.id);
+  const { argv } = invocations()[0]!;
+  for (const flag of ['--system-prompt', '--agents', '--tools', '--setting-sources']) {
+    assert.ok(!argv.includes(flag), `${flag} must not be passed when nothing asked for it`);
+  }
+});
+
 test('a prompt that sets none of them passes none of the flags', async () => {
   await waitForTerminal(enqueueRun({ promptId: makePrompt().id, triggerType: 'manual' })!.id);
   const { argv } = invocations()[0]!;

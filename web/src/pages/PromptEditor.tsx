@@ -32,6 +32,10 @@ const EMPTY_DRAFT: Draft = {
   allowedTools: [],
   disallowedTools: [],
   appendSystemPrompt: null,
+  systemPrompt: null,
+  agentsJson: null,
+  builtinTools: null,
+  settingSources: null,
   maxTurns: null,
   timeoutSeconds: 1800,
   env: {},
@@ -47,6 +51,9 @@ const EMPTY_DRAFT: Draft = {
   completionMarker: null,
   judgeModel: null,
 };
+
+/** Enough to read a repository and change it; the starting point for narrowing. */
+const DEFAULT_BUILTIN_TOOLS = ['Bash', 'Read', 'Edit', 'Write', 'Glob', 'Grep', 'TodoWrite'];
 
 const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 
@@ -729,6 +736,76 @@ export function PromptEditor() {
                 value={draft.appendSystemPrompt ?? ''}
                 onChange={(event) => patch({ appendSystemPrompt: event.target.value || null })}
               />
+            </Field>
+            <Field
+              label="Replacement system prompt"
+              hint="Replaces Claude Code's own system prompt outright, rather than adding to it — including everything it says about being an agent with tools. Leave empty unless that is exactly what you want. The environment briefing and the completion marker are still appended after it."
+            >
+              <textarea
+                value={draft.systemPrompt ?? ''}
+                onChange={(event) => patch({ systemPrompt: event.target.value || null })}
+              />
+            </Field>
+          </Card>
+
+          <Card title="What the run is made of">
+            <Field
+              label="Built-in tools"
+              hint="Which tools the model is told exist. Every one of them carries its schema in the system prompt of every request, so a shorter set is cheaper on every turn. This is not the allow list: that decides what may run unattended, this decides what is there at all."
+            >
+              <select
+                value={draft.builtinTools === null ? 'all' : draft.builtinTools.length === 0 ? 'none' : 'only'}
+                onChange={(event) =>
+                  patch({
+                    builtinTools:
+                      event.target.value === 'all'
+                        ? null
+                        : event.target.value === 'none'
+                          ? []
+                          : // "Only these" with nothing in it reads back as "none",
+                            // so choosing it seeds a working set to edit down from.
+                            (draft.builtinTools?.length ? draft.builtinTools : [...DEFAULT_BUILTIN_TOOLS]),
+                  })
+                }
+              >
+                <option value="all">Everything the CLI ships (default)</option>
+                <option value="only">Only the ones listed below</option>
+                <option value="none">None — no built-in tools at all</option>
+              </select>
+            </Field>
+            {draft.builtinTools !== null && draft.builtinTools.length > 0 && (
+              <ListEditor
+                value={draft.builtinTools}
+                onChange={(builtinTools) => patch({ builtinTools })}
+                placeholder={'Bash\nRead\nEdit'}
+              />
+            )}
+
+            <Field
+              label="Custom subagents"
+              hint='A JSON object of subagents the run may delegate to, e.g. {"reviewer": {"description": "Reviews code", "prompt": "You are a code reviewer"}}.'
+            >
+              <textarea
+                value={draft.agentsJson ?? ''}
+                onChange={(event) => patch({ agentsJson: event.target.value || null })}
+                placeholder={'{\n  "reviewer": { "description": "Reviews code", "prompt": "You are a code reviewer" }\n}'}
+              />
+            </Field>
+
+            <Field
+              label="Settings files to read"
+              hint="Left alone, the CLI reads the user, project and local settings files — and the project one belongs to whatever repository this prompt clones. Narrow it if the run should only get what KubeClaude hands it."
+            >
+              <select
+                value={draft.settingSources ?? ''}
+                onChange={(event) => patch({ settingSources: event.target.value || null })}
+              >
+                <option value="">CLI default — user, project and local</option>
+                <option value="user">user only</option>
+                <option value="user,project">user and project</option>
+                <option value="project">project only</option>
+                <option value="none">none — read no settings files</option>
+              </select>
             </Field>
           </Card>
 

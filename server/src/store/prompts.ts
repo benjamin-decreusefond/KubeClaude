@@ -22,6 +22,10 @@ interface PromptRow {
   allowed_tools: string;
   disallowed_tools: string;
   append_system_prompt: string | null;
+  system_prompt: string | null;
+  agents_json: string | null;
+  builtin_tools: string | null;
+  setting_sources: string | null;
   max_turns: number | null;
   timeout_seconds: number;
   env: string;
@@ -62,6 +66,12 @@ function toPrompt(row: PromptRow): Prompt {
     allowedTools: jsonFromDb<string[]>(row.allowed_tools, []),
     disallowedTools: jsonFromDb<string[]>(row.disallowed_tools, []),
     appendSystemPrompt: row.append_system_prompt,
+    systemPrompt: row.system_prompt,
+    agentsJson: row.agents_json,
+    // An absent column and a stored empty list mean different things here, so
+    // the fallback is null rather than [].
+    builtinTools: row.builtin_tools === null ? null : jsonFromDb<string[] | null>(row.builtin_tools, null),
+    settingSources: row.setting_sources,
     maxTurns: row.max_turns,
     timeoutSeconds: row.timeout_seconds,
     env: jsonFromDb<Record<string, string>>(row.env, {}),
@@ -122,11 +132,12 @@ export function createPrompt(input: PromptInput): Prompt {
     `INSERT INTO prompts (
        id, kind, title, name, description, prompt, enabled, model, fallback_model, effort, max_budget_usd,
        working_dir, add_dirs, repo_url, repo_ref, permission_mode,
-       allowed_tools, disallowed_tools, append_system_prompt, max_turns, timeout_seconds,
+       allowed_tools, disallowed_tools, append_system_prompt, system_prompt, agents_json,
+       builtin_tools, setting_sources, max_turns, timeout_seconds,
        env, mcp_config, mcp_server_ids, settings_json, claude_md, continue_session, last_session_id,
        auto_resume, max_auto_resumes, resume_prompt, completion_check, completion_marker,
        judge_model, created_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
     input.kind,
@@ -150,6 +161,10 @@ export function createPrompt(input: PromptInput): Prompt {
     JSON.stringify(input.allowedTools),
     JSON.stringify(input.disallowedTools),
     input.appendSystemPrompt,
+    input.systemPrompt ?? null,
+    input.agentsJson ?? null,
+    input.builtinTools == null ? null : JSON.stringify(input.builtinTools),
+    input.settingSources ?? null,
     input.maxTurns,
     input.timeoutSeconds,
     JSON.stringify(input.env),
@@ -189,6 +204,10 @@ const COLUMN_BY_FIELD: Record<string, string> = {
   allowedTools: 'allowed_tools',
   disallowedTools: 'disallowed_tools',
   appendSystemPrompt: 'append_system_prompt',
+  systemPrompt: 'system_prompt',
+  agentsJson: 'agents_json',
+  builtinTools: 'builtin_tools',
+  settingSources: 'setting_sources',
   maxTurns: 'max_turns',
   timeoutSeconds: 'timeout_seconds',
   env: 'env',
@@ -206,7 +225,16 @@ const COLUMN_BY_FIELD: Record<string, string> = {
   judgeModel: 'judge_model',
 };
 
-const JSON_FIELDS = new Set(['allowedTools', 'disallowedTools', 'env', 'mcpServerIds', 'addDirs']);
+const JSON_FIELDS = new Set([
+  'allowedTools',
+  'disallowedTools',
+  'env',
+  'mcpServerIds',
+  'addDirs',
+  // Nullable: JSON.stringify(null) round-trips back to null, which is what
+  // "leave the built-in tools alone" has to keep meaning after an edit.
+  'builtinTools',
+]);
 const BOOL_FIELDS = new Set(['enabled', 'continueSession', 'autoResume']);
 
 export function updatePrompt(id: string, patch: Partial<Prompt>): Prompt | null {

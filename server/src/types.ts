@@ -85,6 +85,33 @@ export interface Prompt {
   allowedTools: string[];
   disallowedTools: string[];
   appendSystemPrompt: string | null;
+  /**
+   * Replaces Claude Code's own system prompt outright (`--system-prompt`),
+   * where `appendSystemPrompt` only adds to it. The briefing and the marker
+   * instruction are still appended after it, so KubeClaude's own context
+   * survives — everything the CLI would have said about being an agent does not.
+   */
+  systemPrompt: string | null;
+  /**
+   * Custom subagents for the run, as the JSON object `--agents` takes:
+   * `{"reviewer": {"description": "…", "prompt": "…"}}`.
+   */
+  agentsJson: string | null;
+  /**
+   * Which built-in tools exist at all (`--tools`). Null leaves the CLI's full
+   * set; an empty list disables every built-in tool; a list keeps only those.
+   * Distinct from the allow list, which decides what may run without asking:
+   * this decides what the model is told exists, and every tool it knows about
+   * costs schema tokens on every turn.
+   */
+  builtinTools: string[] | null;
+  /**
+   * Which settings files the CLI reads (`--setting-sources`): a comma-separated
+   * subset of `user`, `project`, `local`, or `none` for no files at all. Null
+   * leaves the CLI's default, which reads all three — including the
+   * `.claude/settings.json` of whatever repository the run just cloned.
+   */
+  settingSources: string | null;
   maxTurns: number | null;
   timeoutSeconds: number;
   env: Record<string, string>;
