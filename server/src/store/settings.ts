@@ -21,6 +21,8 @@ export const DEFAULT_SETTINGS: Settings = {
   quotaGuardEnabled: false,
   quotaReservePct: 0,
   defaultModel: null,
+  defaultFallbackModel: null,
+  defaultEffort: null,
   globalEnv: {},
   environmentBriefing: DEFAULT_ENVIRONMENT_BRIEFING,
   timezone: process.env.TZ ?? 'UTC',

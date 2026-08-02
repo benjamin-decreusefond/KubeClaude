@@ -7,7 +7,7 @@ import { claudeCredentials, config, forwardedEnvPrefixes } from '../config.js';
 import { DEFAULT_GIT_IDENTITY, prepareRepository, writeGitConfig, type GitIdentity } from './git.js';
 import { buildMcpDocument } from '../store/mcp.js';
 import { weighTokens } from '../store/usage.js';
-import type { BudgetBasis, ModelUsage, Prompt, UsageTotals } from '../types.js';
+import type { BudgetBasis, Effort, ModelUsage, Prompt, UsageTotals } from '../types.js';
 
 export interface RunnerOptions {
   prompt: Prompt;
@@ -26,6 +26,10 @@ export interface RunnerOptions {
   /** Who commits made during the run are authored by. */
   gitIdentity?: GitIdentity;
   defaultModel?: string | null;
+  /** Fallback chain for a prompt that does not name its own. */
+  defaultFallbackModel?: string | null;
+  /** Effort for a prompt that does not pin one; null leaves the CLI's default. */
+  defaultEffort?: Effort | null;
   /** Turn cap for a prompt that does not pin its own; 0 means uncapped. */
   defaultMaxTurns?: number;
   /** Kill the run once it has spent this much, weighed by `budgetBasis`; 0 disables. */
@@ -180,6 +184,26 @@ async function prepare(options: RunnerOptions): Promise<PreparedInvocation> {
 
   const model = prompt.model?.trim() || options.defaultModel?.trim();
   if (model) args.push('--model', model);
+
+  // What to try when the chosen model is overloaded. Nobody is watching to
+  // retry a scheduled run by hand, so a chain here is the difference between
+  // the work happening on a smaller model and not happening at all.
+  const fallbackModel = prompt.fallbackModel?.trim() || options.defaultFallbackModel?.trim();
+  if (fallbackModel) args.push('--fallback-model', fallbackModel);
+
+  const effort = prompt.effort ?? options.defaultEffort ?? null;
+  if (effort) args.push('--effort', effort);
+
+  // The CLI stops itself on this one and still reports what it spent, unlike
+  // the token ceiling, which has to kill the process from outside.
+  if (prompt.maxBudgetUsd && prompt.maxBudgetUsd > 0) {
+    args.push('--max-budget-usd', String(prompt.maxBudgetUsd));
+  }
+
+  // Variadic on the CLI side: one flag, then every directory, terminated by the
+  // next flag. The working directory is already granted, so these are the extra
+  // ones — a second checkout, a shared cache — a prompt asked for.
+  if (prompt.addDirs.length > 0) args.push('--add-dir', ...prompt.addDirs);
 
   // Order matters: the environment briefing establishes where the run is and
   // what it may do, before the prompt's own instructions narrow that down. The

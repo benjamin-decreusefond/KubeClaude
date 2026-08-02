@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { cancelRun, cancelRunsForPrompt, enqueueRun } from '../queue.js';
 import * as promptStore from '../store/prompts.js';
 import * as runStore from '../store/runs.js';
-import { permissionModeSchema, repoRefSchema, repoUrlSchema } from './schemas.js';
+import { effortSchema, permissionModeSchema, repoRefSchema, repoUrlSchema } from './schemas.js';
 import type { Prompt, Run } from '../types.js';
 
 const idParams = z.object({ id: z.string().min(1) });
@@ -18,6 +18,7 @@ const idParams = z.object({ id: z.string().min(1) });
 const startSchema = z.object({
   message: z.string().min(1).max(100_000),
   model: z.string().max(120).nullable().default(null),
+  effort: effortSchema.nullable().default(null),
   permissionMode: permissionModeSchema.default('bypassPermissions'),
   workingDir: z.string().max(1024).nullable().default(null),
   repoUrl: repoUrlSchema.default(null),
@@ -94,7 +95,13 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
       prompt: input.message,
       enabled: true,
       model: input.model ?? source?.model ?? null,
+      // Everything the conversation did not ask about comes from the prompt it
+      // was started from, so talking to a task first behaves like running it.
+      fallbackModel: source?.fallbackModel ?? null,
+      effort: input.effort ?? source?.effort ?? null,
+      maxBudgetUsd: source?.maxBudgetUsd ?? null,
       workingDir: input.workingDir ?? source?.workingDir ?? null,
+      addDirs: source?.addDirs ?? [],
       repoUrl: input.repoUrl ?? source?.repoUrl ?? null,
       repoRef: input.repoRef ?? source?.repoRef ?? null,
       permissionMode: input.permissionMode,

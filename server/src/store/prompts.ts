@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { boolFromDb, boolToDb, db, jsonFromDb } from '../db.js';
-import type { CompletionCheck, PermissionMode, Prompt, PromptKind } from '../types.js';
+import type { CompletionCheck, Effort, PermissionMode, Prompt, PromptKind } from '../types.js';
 
 interface PromptRow {
   id: string;
@@ -11,7 +11,11 @@ interface PromptRow {
   prompt: string;
   enabled: number;
   model: string | null;
+  fallback_model: string | null;
+  effort: string | null;
+  max_budget_usd: number | null;
   working_dir: string | null;
+  add_dirs: string;
   repo_url: string | null;
   repo_ref: string | null;
   permission_mode: string;
@@ -47,7 +51,11 @@ function toPrompt(row: PromptRow): Prompt {
     prompt: row.prompt,
     enabled: boolFromDb(row.enabled),
     model: row.model,
+    fallbackModel: row.fallback_model,
+    effort: (row.effort as Effort | null) || null,
+    maxBudgetUsd: row.max_budget_usd,
     workingDir: row.working_dir,
+    addDirs: jsonFromDb<string[]>(row.add_dirs, []),
     repoUrl: row.repo_url,
     repoRef: row.repo_ref,
     permissionMode: row.permission_mode as PermissionMode,
@@ -112,12 +120,13 @@ export function createPrompt(input: PromptInput): Prompt {
   const id = randomUUID();
   db.prepare(
     `INSERT INTO prompts (
-       id, kind, title, name, description, prompt, enabled, model, working_dir, repo_url, repo_ref, permission_mode,
+       id, kind, title, name, description, prompt, enabled, model, fallback_model, effort, max_budget_usd,
+       working_dir, add_dirs, repo_url, repo_ref, permission_mode,
        allowed_tools, disallowed_tools, append_system_prompt, max_turns, timeout_seconds,
        env, mcp_config, mcp_server_ids, settings_json, claude_md, continue_session, last_session_id,
        auto_resume, max_auto_resumes, resume_prompt, completion_check, completion_marker,
        judge_model, created_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
     input.kind,
@@ -127,7 +136,14 @@ export function createPrompt(input: PromptInput): Prompt {
     input.prompt,
     boolToDb(input.enabled),
     input.model,
+    input.fallbackModel,
+    input.effort,
+    input.maxBudgetUsd,
     input.workingDir,
+    // Coalesced rather than trusted: the column is NOT NULL, and a caller
+    // written before it existed would otherwise fail the insert instead of
+    // getting the empty list the migration promises.
+    JSON.stringify(input.addDirs ?? []),
     input.repoUrl,
     input.repoRef,
     input.permissionMode,
@@ -162,7 +178,11 @@ const COLUMN_BY_FIELD: Record<string, string> = {
   prompt: 'prompt',
   enabled: 'enabled',
   model: 'model',
+  fallbackModel: 'fallback_model',
+  effort: 'effort',
+  maxBudgetUsd: 'max_budget_usd',
   workingDir: 'working_dir',
+  addDirs: 'add_dirs',
   repoUrl: 'repo_url',
   repoRef: 'repo_ref',
   permissionMode: 'permission_mode',
@@ -186,7 +206,7 @@ const COLUMN_BY_FIELD: Record<string, string> = {
   judgeModel: 'judge_model',
 };
 
-const JSON_FIELDS = new Set(['allowedTools', 'disallowedTools', 'env', 'mcpServerIds']);
+const JSON_FIELDS = new Set(['allowedTools', 'disallowedTools', 'env', 'mcpServerIds', 'addDirs']);
 const BOOL_FIELDS = new Set(['enabled', 'continueSession', 'autoResume']);
 
 export function updatePrompt(id: string, patch: Partial<Prompt>): Prompt | null {

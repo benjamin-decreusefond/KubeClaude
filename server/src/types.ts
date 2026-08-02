@@ -18,7 +18,13 @@ export type TriggerType =
 
 export type WindowKind = 'session' | 'weekly';
 
-export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions';
+export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'auto' | 'bypassPermissions';
+
+/**
+ * How hard the model works per turn (`--effort`). Null wherever this appears
+ * means "leave it to the CLI", which is not the same as choosing a level.
+ */
+export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 /**
  * How KubeClaude decides whether a run that stopped on a quota limit had already
@@ -52,7 +58,25 @@ export interface Prompt {
   prompt: string;
   enabled: boolean;
   model: string | null;
+  /**
+   * Models tried, in order, when the one above is overloaded or unavailable
+   * (`--fallback-model`). A scheduled run has nobody to retry it by hand, so
+   * this is the difference between "ran on Sonnet" and "failed at 3am".
+   */
+  fallbackModel: string | null;
+  /** Reasoning effort for this prompt's runs; null leaves the CLI's own default. */
+  effort: Effort | null;
+  /**
+   * Dollar ceiling for one run (`--max-budget-usd`). The CLI stops itself and
+   * still reports, which is gentler than the token ceiling's kill. Null is off.
+   */
+  maxBudgetUsd: number | null;
   workingDir: string | null;
+  /**
+   * Directories outside the working one that the run may read and write
+   * (`--add-dir`). This is what lets one prompt work across two checkouts.
+   */
+  addDirs: string[];
   /** Repository cloned into the working directory before each run, if any. */
   repoUrl: string | null;
   /** Branch, tag or commit to check out; null means the remote's default. */
@@ -286,6 +310,14 @@ export interface Settings {
   quotaReservePct: number;
   /** Default model when a prompt does not pin one. */
   defaultModel: string | null;
+  /**
+   * Fallback chain for every prompt that does not name its own. Set globally
+   * because "if Opus is busy, take Sonnet" is a property of the account's
+   * capacity rather than of any one task.
+   */
+  defaultFallbackModel: string | null;
+  /** Effort for prompts that do not pin one; null leaves the CLI's default. */
+  defaultEffort: Effort | null;
   /** Env injected into every run, before the prompt's own env. */
   globalEnv: Record<string, string>;
   /**

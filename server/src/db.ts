@@ -286,6 +286,21 @@ const MIGRATIONS: Array<{ name: string; up: string }> = [
       ALTER TABLE prompts ADD COLUMN repo_ref TEXT;
     `,
   },
+  {
+    name: '007_execution_controls',
+    up: `
+      /*
+       * Flags the CLI has and this app could not reach: a fallback chain for
+       * when the chosen model is overloaded, an effort level, a dollar ceiling
+       * the CLI enforces on itself, and extra directories a run may touch.
+       * All optional — an existing prompt keeps behaving exactly as it did.
+       */
+      ALTER TABLE prompts ADD COLUMN fallback_model TEXT;
+      ALTER TABLE prompts ADD COLUMN effort TEXT;
+      ALTER TABLE prompts ADD COLUMN max_budget_usd REAL;
+      ALTER TABLE prompts ADD COLUMN add_dirs TEXT NOT NULL DEFAULT '[]';
+    `,
+  },
 ];
 
 export function migrate(): void {
