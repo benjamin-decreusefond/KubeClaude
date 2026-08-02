@@ -1,4 +1,5 @@
 import type {
+  AppError,
   AuthConfig,
   AuthState,
   Capabilities,
@@ -6,6 +7,7 @@ import type {
   ChatSummary,
   CreateGoalInput,
   Dashboard,
+  DbBackup,
   Goal,
   GoalDetail,
   StartChatInput,
@@ -178,6 +180,13 @@ export const api = {
   startGoal: (id: string) => request<Goal>(`/api/goals/${id}/start`, { method: 'POST' }),
   pauseGoal: (id: string) => request<Goal>(`/api/goals/${id}/pause`, { method: 'POST' }),
   iterateGoal: (id: string) => request<Run>(`/api/goals/${id}/iterate`, { method: 'POST' }),
+
+  errors: (limit = 100) => request<{ items: AppError[]; total: number }>(`/api/errors?limit=${limit}`),
+  reportError: (input: { message: string; detail?: string; context?: string }) =>
+    request<AppError>('/api/errors', { method: 'POST', body: JSON.stringify(input) }),
+  dismissError: (id: string) => request<void>(`/api/errors/${id}`, { method: 'DELETE' }),
+  clearErrors: () => request<{ cleared: number }>('/api/errors', { method: 'DELETE' }),
+  backups: () => request<{ items: DbBackup[] }>('/api/backups'),
 
   mcpServers: () => request<McpServer[]>('/api/mcp-servers'),
   createMcpServer: (input: Partial<McpServer>) =>

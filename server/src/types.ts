@@ -401,3 +401,20 @@ export interface UsageTotals {
   totalTokens: number;
   costUsd: number;
 }
+
+/** Where a recorded error came from. */
+export type ErrorSource = 'server' | 'browser' | 'run';
+
+/** One distinct fault, with how often it has happened since it first did. */
+export interface AppError {
+  id: string;
+  source: ErrorSource;
+  message: string;
+  /** Stack or body, clipped. */
+  detail: string | null;
+  /** Where it happened: a request path, a browser route, a run id. */
+  context: string | null;
+  count: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+}

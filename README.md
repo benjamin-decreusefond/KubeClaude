@@ -108,6 +108,9 @@ Everything is environment variables; the rest is configured in the UI.
 | `MAX_CONCURRENT_RUNS` | `1` | Parallel runs. Raising it spends quota faster. |
 | `SCHEDULER_INTERVAL_MS` | `20000` | How often triggers are evaluated. |
 | `RUN_RETENTION_DAYS` | `30` | Runs older than this are pruned. `0` keeps everything. |
+| `MAX_EVENT_BYTES` | `65536` | Ceiling on one stored line of run output. Over it, the long strings inside the message are cut and marked — a tool result that read a large file keeps its shape, not its megabytes. |
+| `DB_BACKUPS_KEPT` | `5` | Copies of the database kept in `DATA_DIR/backups`; one is taken before every migration. |
+| `MAX_STORED_ERRORS` | `200` | Distinct faults kept in the error feed. |
 | `KUBECLAUDE_AUTH_TOKEN` | — | A static credential accepted as `Authorization: Bearer` or `X-Api-Key`, on top of whatever login method is configured. Optional now that the app has its own accounts — see [Who can reach it](#who-can-reach-it). |
 | `AUTH_METHOD` | — | Pin the login method to `none`, `forms`, `basic` or `external`. Set it and the UI shows the choice as locked, so an instance deliberately placed behind an SSO proxy cannot have that turned off from inside the app. |
 | `FORWARD_ENV_PREFIXES` | — | Comma-separated prefixes of pod env vars to forward into runs, e.g. `GITHUB_,GIT_`. Nothing is forwarded by default. |
@@ -356,6 +359,25 @@ Browser ──HTTP/SSE──▶ Fastify ──▶ SQLite (prompts, triggers, goa
 One process, one SQLite file, no external dependencies. State lives in `DATA_DIR`;
 back that up and you have backed up KubeClaude.
 
+### When something goes wrong
+
+Two things exist because a self-running instance has nobody watching its logs.
+
+**The error feed** — the **Errors** page, `/api/errors`. A request that threw, a
+rejection nothing handled, a run that could not be started, and a page of the UI that
+failed to render: all of them land in one list, with a stack. Identical faults are
+counted rather than repeated, so a poll that has been failing every fifteen seconds
+since Tuesday is one line saying so. The sidebar shows the count. Nothing here goes
+anywhere else — it is a local list, not telemetry.
+
+**A copy before every migration** — a migration runs at startup, and one that succeeds
+but leaves the app unable to start is the single failure it cannot repair from the
+inside, because the thing that would fix it is the thing that is down. So before any
+migration is applied to a database that already has a schema, `VACUUM INTO` writes a
+consistent copy to `DATA_DIR/backups`, and the last few are kept. Restoring is
+deliberate — stop the pod, put the copy over `kubeclaude.db`, start it again — and the
+files are listed at the bottom of the Errors page.
+
 ### API
 
 | | |
@@ -374,6 +396,8 @@ back that up and you have backed up KubeClaude.
 | `POST /api/runs/:id/cancel`, `/resume`, `/follow-up` | Act on a run |
 | `GET POST /api/mcp-servers`, `PATCH DELETE /api/mcp-servers/:id` | MCP connections |
 | `GET PATCH /api/settings`, `GET /api/settings/defaults` | Settings, and the shipped defaults |
+| `GET POST DELETE /api/errors`, `DELETE /api/errors/:id` | The error feed: read it, file a browser fault, dismiss one, clear the list |
+| `GET /api/backups` | The copies taken before each migration |
 | `GET /api/stream` | SSE: run created/updated, run output, quota changed |
 | `GET /api/auth/state`, `POST /api/auth/setup`, `/login`, `/logout` | Public: what the login screen needs, and the three things it can do |
 | `GET PATCH /api/auth/config` | Login method, local bypass, proxy header, username, session lifetime |
@@ -409,8 +433,8 @@ they catch rather than for how they look.
 | Layer | What it proves | Cost |
 |---|---|---|
 | `server/test/*.test.ts` | The queue, scheduler, goal loop and auth guard behave — driven against a stub `claude` binary, so the quota → park → resume → complete path is covered without a token or a network. `api.test.ts` goes through the real HTTP stack with `app.inject()`, so routes, schemas and the auth hook are covered too | ~30s |
-| `web/src/**/*.test.tsx` | Components render and their forms submit. Typechecking cannot see a screen that throws on an empty instance | ~2s |
-| `e2e/tests` | The built server, the built SPA and a real Chromium. Every page renders; a prompt is written, scheduled with a cron trigger, run, and read back; a goal is set, its objectives ticked, its progress log filled, paused and deleted; a chat is held; an MCP connection is stored and previewed; settings and every login method are exercised; signing out and back in works. Each test also fails on an uncaught page error, not just on its assertions | ~30s |
+| `web/src/**/*.test.tsx` | Components render and their forms submit, and a page that throws is caught, reported and recoverable. Typechecking cannot see a screen that throws on an empty instance | ~2s |
+| `e2e/tests` | The built server, the built SPA and a real Chromium. Every page renders; a prompt is written, scheduled with a cron trigger, run, and read back; a goal is set, its objectives ticked, its progress log filled, paused and deleted; a chat is held; an MCP connection is stored and previewed; settings and every login method are exercised; a fault is filed, read and dismissed on the Errors page; signing out and back in works. Each test also fails on an uncaught page error, not just on its assertions | ~30s |
 
 The e2e run starts its own server on a throwaway database with the stub CLI and no
 credentials, so a full pass touches no cluster and spends no quota. That is deliberate:

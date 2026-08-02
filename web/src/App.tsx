@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
+import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { api, getToken, setToken } from './api';
 import { usePolled, useTheme } from './hooks';
 import { Chat } from './pages/Chat';
 import { Chats } from './pages/Chats';
 import { Dashboard } from './pages/Dashboard';
+import { Errors } from './pages/Errors';
 import { GoalDetail } from './pages/GoalDetail';
 import { Goals } from './pages/Goals';
 import { McpServers } from './pages/McpServers';
@@ -13,10 +14,12 @@ import { Prompts } from './pages/Prompts';
 import { RunDetail } from './pages/RunDetail';
 import { Runs } from './pages/Runs';
 import { SettingsPage } from './pages/Settings';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { Modal, Field } from './components/primitives';
 import type { AuthState } from './types';
 
 export function App({ auth, onAuthChanged }: { auth: AuthState; onAuthChanged: () => void }) {
+  const location = useLocation();
   const [theme, setTheme] = useTheme();
   const [showToken, setShowToken] = useState(false);
   const [tokenDraft, setTokenDraft] = useState(getToken());
@@ -57,6 +60,10 @@ export function App({ auth, onAuthChanged }: { auth: AuthState; onAuthChanged: (
             {status && status.activeRuns > 0 && <span className="nav-count">{status.activeRuns} live</span>}
           </NavLink>
           <NavLink to="/mcp">MCP connections</NavLink>
+          <NavLink to="/errors">
+            Errors
+            {status && status.errorCount > 0 && <span className="nav-count">{status.errorCount}</span>}
+          </NavLink>
           <NavLink to="/settings">Settings</NavLink>
         </nav>
 
@@ -121,21 +128,25 @@ export function App({ auth, onAuthChanged }: { auth: AuthState; onAuthChanged: (
           </div>
         )}
 
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/chats" element={<Chats />} />
-          <Route path="/chats/:id" element={<Chat />} />
-          <Route path="/prompts" element={<Prompts />} />
-          <Route path="/prompts/new" element={<PromptEditor />} />
-          <Route path="/prompts/:id" element={<PromptEditor />} />
-          <Route path="/goals" element={<Goals />} />
-          <Route path="/goals/:id" element={<GoalDetail />} />
-          <Route path="/runs" element={<Runs />} />
-          <Route path="/runs/:id" element={<RunDetail />} />
-          <Route path="/mcp" element={<McpServers />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        {/* Keyed on the path, so a page that threw does not stay broken once you navigate away. */}
+        <ErrorBoundary key={location.pathname} where={location.pathname}>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/chats" element={<Chats />} />
+            <Route path="/chats/:id" element={<Chat />} />
+            <Route path="/prompts" element={<Prompts />} />
+            <Route path="/prompts/new" element={<PromptEditor />} />
+            <Route path="/prompts/:id" element={<PromptEditor />} />
+            <Route path="/goals" element={<Goals />} />
+            <Route path="/goals/:id" element={<GoalDetail />} />
+            <Route path="/runs" element={<Runs />} />
+            <Route path="/runs/:id" element={<RunDetail />} />
+            <Route path="/mcp" element={<McpServers />} />
+            <Route path="/errors" element={<Errors />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </ErrorBoundary>
       </main>
 
       {showToken && (

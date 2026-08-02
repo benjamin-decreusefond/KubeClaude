@@ -7,6 +7,7 @@ import { assessCompletion, markerFor, markerInstruction } from './claude/complet
 import * as runs from './store/runs.js';
 import { getPrompt, updatePrompt } from './store/prompts.js';
 import { getSettings } from './store/settings.js';
+import { recordError } from './store/errors.js';
 import { addUsage, currentWindows, getQuotaState, openWindows } from './store/usage.js';
 import type { Run, RunStatus } from './types.js';
 
@@ -283,6 +284,14 @@ async function execute(run: Run): Promise<void> {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.error({ err: message, run: run.id }, 'run failed to execute');
+    // The run records its own failure; this is for the feed, where a fault that
+    // hits every run of every prompt is visible as one recurring entry.
+    recordError({
+      source: 'run',
+      message,
+      detail: error instanceof Error ? (error.stack ?? null) : null,
+      context: `run ${run.id} (${run.promptName})`,
+    });
     runs.appendEvent(run.id, 'system', { kind: 'error', message });
     finish(run.id, 'failed', { error: message });
   } finally {

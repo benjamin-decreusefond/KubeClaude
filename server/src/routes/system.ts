@@ -13,6 +13,7 @@ import {
   shadowedCredentials,
 } from '../config.js';
 import { activeRunCount } from '../queue.js';
+import { countErrors } from '../store/errors.js';
 import { countRuns } from '../store/runs.js';
 import { DEFAULT_SETTINGS, getSettings, updateSettings } from '../store/settings.js';
 import { getQuotaState, listWindows } from '../store/usage.js';
@@ -52,6 +53,9 @@ export async function systemRoutes(app: FastifyInstance): Promise<void> {
       activeRuns: activeRunCount(),
       queuedRuns: countRuns({ status: 'queued' }),
       awaitingResume: countRuns({ status: 'rate_limited' }),
+      // So the sidebar can show that something went wrong without polling a
+      // second endpoint for it.
+      errorCount: countErrors(),
       quota,
       settings: getSettings(),
     };
