@@ -307,7 +307,7 @@ export function SettingsPage() {
             label="Default turn cap"
             hint={
               draft.defaultMaxTurns > 0
-                ? `Prompts that do not set their own stop after ${draft.defaultMaxTurns} turns. Every turn re-sends the whole conversation, so this is what stops a looping run from eating a window.`
+                ? `Prompts that do not set their own stop after ${draft.defaultMaxTurns} turns. Every turn re-sends the whole conversation, so this stops a looping run from eating a window — but set it too low and real work stops half-done: changing code and opening a pull request takes well over thirty. A run that hits it can be resumed.`
                 : 'Off — a prompt with no cap of its own can run as long as it likes. A prompt can always set 0 to opt out individually.'
             }
           >

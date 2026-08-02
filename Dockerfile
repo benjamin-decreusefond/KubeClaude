@@ -32,13 +32,17 @@ RUN npm prune --omit=dev
 FROM node:22-bookworm-slim AS runtime
 
 # git and gh are what a prompt needs to actually finish a job: clone a repo,
-# push a branch, merge a pull request. ripgrep is what Claude's search tools use.
+# push a branch, merge a pull request. ripgrep is what Claude's search tools use,
+# and python3 is what it reaches for the moment a shell one-liner is not enough —
+# it was in the build stage only, so runs found it missing and spent a turn
+# discovering that.
 # kubectl is for looking at the result — whether the rollout came up, what the
 # events say — using the pod's ServiceAccount, which is read-only by design.
 ARG KUBECTL_MINOR=v1.33
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates curl gnupg git openssh-client ripgrep jq less tini \
+        python3 \
     && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
         -o /usr/share/keyrings/githubcli-archive-keyring.gpg \
     && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \

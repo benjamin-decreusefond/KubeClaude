@@ -9,7 +9,14 @@ export const DEFAULT_SETTINGS: Settings = {
   sessionTokenBudget: 0,
   weeklyTokenBudget: 0,
   budgetBasis: 'weighted',
-  defaultMaxTurns: 30,
+  /**
+   * Turns a run may take when the prompt does not pin its own. Thirty is about
+   * ten minutes of reading and two edits: enough for "check something and
+   * report", nowhere near enough for "fix this and open a pull request", which
+   * is what the first real goal ran into. The per-run token ceiling is the
+   * budget guard; this one is only here to stop a genuinely stuck loop.
+   */
+  defaultMaxTurns: 120,
   runTokenCap: 0,
   quotaGuardEnabled: false,
   quotaReservePct: 0,
