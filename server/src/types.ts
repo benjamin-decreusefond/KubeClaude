@@ -246,6 +246,13 @@ export interface AuthState {
   via: 'session' | 'basic' | 'proxy' | 'api-key' | 'local' | 'open' | null;
   /** The method is pinned by an environment variable and cannot be changed here. */
   locked: boolean;
+  /**
+   * Setting the first password requires presenting KUBECLAUDE_AUTH_TOKEN,
+   * because this instance already runs with one. The setup screen needs to know
+   * before it is submitted: the field for it is the difference between a form
+   * that works and one that refuses with no visible way to comply.
+   */
+  staticTokenRequired: boolean;
   /** This request came from a private address, so the local bypass could apply. */
   local: boolean;
 }

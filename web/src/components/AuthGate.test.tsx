@@ -31,6 +31,7 @@ function state(overrides: Partial<AuthState> = {}): AuthState {
     username: 'ben',
     via: 'session',
     locked: false,
+    staticTokenRequired: false,
     local: false,
     ...overrides,
   };
@@ -97,12 +98,14 @@ describe('first run', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Set password' }));
 
     expect(await screen.findByText('kc-test-key-value')).toBeDefined();
-    expect(mocked.setupAuth).toHaveBeenCalledWith({
+    expect(mocked.setupAuth.mock.calls[0]?.[0]).toEqual({
       username: 'admin',
       password: 'a-good-password',
       method: 'forms',
       requirement: 'always',
     });
+    // Nothing to present on an instance with no static token.
+    expect(mocked.setupAuth.mock.calls[0]?.[1]).toBeUndefined();
 
     // The app is only reached deliberately, so the key is not scrolled past.
     mocked.authState.mockResolvedValue(state());
@@ -122,7 +125,7 @@ describe('first run', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Set password' }));
 
     await waitFor(() =>
-      expect(mocked.setupAuth).toHaveBeenCalledWith(expect.objectContaining({ requirement: 'local_bypass' })),
+      expect(mocked.setupAuth.mock.calls[0]?.[0]).toMatchObject({ requirement: 'local_bypass' }),
     );
   });
 });
@@ -195,4 +198,50 @@ test('an authenticated caller goes straight through to the app', async () => {
   mocked.authState.mockResolvedValue(state({ method: 'none', username: null, via: 'open' }));
   renderGate();
   expect(await screen.findByText('app for nobody')).toBeDefined();
+});
+
+describe('an instance already protected by a static token', () => {
+  test('asks for the token up front rather than refusing once you submit', async () => {
+    mocked.authState.mockResolvedValue(
+      state({ setupRequired: true, authenticated: false, username: null, via: null, staticTokenRequired: true }),
+    );
+    mocked.setupAuth.mockResolvedValue({ apiKey: 'kc_key' });
+
+    renderGate();
+    // Visible without expanding anything: the field is the only way to comply,
+    // and hiding it behind a disclosure is how the form came to look broken.
+    const token = await screen.findByLabelText('Static token');
+
+    await userEvent.type(screen.getByLabelText('Password'), 'a-good-password');
+    await userEvent.type(screen.getByLabelText('Confirm password'), 'a-good-password');
+
+    // And there is no point letting it be submitted without one.
+    expect(screen.getByRole('button', { name: 'Set password' })).toHaveProperty('disabled', true);
+
+    await userEvent.type(token, 'static-token-for-machines');
+    await userEvent.click(screen.getByRole('button', { name: 'Set password' }));
+
+    await waitFor(() => expect(mocked.setupAuth).toHaveBeenCalled());
+    // Presented with the request, so the server can check it.
+    expect(mocked.setupAuth.mock.calls[0]?.[1]).toBe('static-token-for-machines');
+    // And kept, now that it has been accepted.
+    expect(localStorage.getItem('kubeclaude.token')).toBe('static-token-for-machines');
+  });
+
+  test('a token the server refuses is not kept', async () => {
+    mocked.authState.mockResolvedValue(
+      state({ setupRequired: true, authenticated: false, username: null, via: null, staticTokenRequired: true }),
+    );
+    mocked.setupAuth.mockRejectedValue(new Error('This instance is protected by KUBECLAUDE_AUTH_TOKEN'));
+
+    renderGate();
+    await userEvent.type(await screen.findByLabelText('Static token'), 'the-wrong-token');
+    await userEvent.type(screen.getByLabelText('Password'), 'a-good-password');
+    await userEvent.type(screen.getByLabelText('Confirm password'), 'a-good-password');
+    await userEvent.click(screen.getByRole('button', { name: 'Set password' }));
+
+    await waitFor(() => expect(screen.getByText(/protected by KUBECLAUDE_AUTH_TOKEN/)).toBeTruthy());
+    // Storing it would have broken every request after this one, quietly.
+    expect(localStorage.getItem('kubeclaude.token')).toBeNull();
+  });
 });

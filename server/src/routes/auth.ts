@@ -100,6 +100,7 @@ function signedInState(request: FastifyRequest): AuthState {
     username: stored.username || null,
     via: 'session',
     locked,
+    staticTokenRequired: false,
     local: isLocalAddress(request.ip),
   };
 }
@@ -119,6 +120,9 @@ async function stateFor(request: FastifyRequest): Promise<AuthState> {
     username: outcome.username ?? (outcome.allowed || bypass ? stored.username || null : null),
     via: outcome.allowed ? outcome.via : bypass ? 'local' : null,
     locked,
+    // Only while there is still a password to set; afterwards the token is one
+    // credential among several and nothing special has to be said about it.
+    staticTokenRequired: Boolean(config.authToken) && !stored.configured,
     local,
   };
 }

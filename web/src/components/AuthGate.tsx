@@ -46,7 +46,7 @@ export function AuthGate({ children }: { children: (state: AuthState, reload: ()
   if (state.setupRequired && !state.authenticated) {
     return (
       <Shell>
-        <Setup onDone={() => void load()} />
+        <Setup tokenRequired={state.staticTokenRequired} onDone={() => void load()} />
       </Shell>
     );
   }
@@ -82,7 +82,7 @@ function Shell({ children }: { children: ReactNode }) {
   );
 }
 
-function Setup({ onDone }: { onDone: () => void }) {
+function Setup({ tokenRequired, onDone }: { tokenRequired: boolean; onDone: () => void }) {
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -95,7 +95,8 @@ function Setup({ onDone }: { onDone: () => void }) {
 
   const tooShort = password.length > 0 && password.length < 8;
   const mismatch = confirm.length > 0 && confirm !== password;
-  const ready = username.trim() && password.length >= 8 && confirm === password && !busy;
+  const ready =
+    username.trim() && password.length >= 8 && confirm === password && !busy && (!tokenRequired || token.trim());
 
   const submit = async () => {
     setBusy(true);
@@ -103,14 +104,20 @@ function Setup({ onDone }: { onDone: () => void }) {
     try {
       // An instance already protected by KUBECLAUDE_AUTH_TOKEN requires it here,
       // so upgrading a locked-down deployment cannot be hijacked by whoever
-      // loads this page first.
-      if (token.trim()) setToken(token.trim());
-      const result = await api.setupAuth({
-        username: username.trim(),
-        password,
-        method,
-        requirement: localBypass ? 'local_bypass' : 'always',
-      });
+      // loads this page first. It is presented for this one request and only
+      // stored once it has been accepted — a wrong token kept in the browser
+      // would go on failing every request after this one, silently.
+      const presented = token.trim();
+      const result = await api.setupAuth(
+        {
+          username: username.trim(),
+          password,
+          method,
+          requirement: localBypass ? 'local_bypass' : 'always',
+        },
+        presented || undefined,
+      );
+      if (presented) setToken(presented);
       setApiKey(result.apiKey);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -188,20 +195,35 @@ function Setup({ onDone }: { onDone: () => void }) {
         hint="Anything from 10./172.16-31./192.168./loopback gets in without signing in. Convenient at home; wrong the moment this port is reachable from outside."
       />
 
-      <details style={{ marginTop: 12 }}>
-        <summary className="stat-note">This instance already has KUBECLAUDE_AUTH_TOKEN set</summary>
+      {tokenRequired ? (
         <Field
           label="Static token"
-          hint="Only needed when the server runs with KUBECLAUDE_AUTH_TOKEN. It has to be presented here, so an already-protected instance stays protected while you set a password."
+          hint="This instance runs with KUBECLAUDE_AUTH_TOKEN, so it is already protected and stays that way while you set a password: paste the same value here. It is the KUBECLAUDE_AUTH_TOKEN in the deployment's environment — in a Kubernetes install, whatever your secret puts there."
         >
           <input
             type="password"
             value={token}
+            autoFocus
             onChange={(event) => setTokenDraft(event.target.value)}
             placeholder="Paste the token"
           />
         </Field>
-      </details>
+      ) : (
+        <details style={{ marginTop: 12 }}>
+          <summary className="stat-note">This instance already has KUBECLAUDE_AUTH_TOKEN set</summary>
+          <Field
+            label="Static token"
+            hint="Only needed when the server runs with KUBECLAUDE_AUTH_TOKEN. It has to be presented here, so an already-protected instance stays protected while you set a password."
+          >
+            <input
+              type="password"
+              value={token}
+              onChange={(event) => setTokenDraft(event.target.value)}
+              placeholder="Paste the token"
+            />
+          </Field>
+        </details>
+      )}
 
       <div className="row" style={{ justifyContent: 'flex-end', marginTop: 16 }}>
         <button className="primary" disabled={!ready} onClick={() => void submit()}>

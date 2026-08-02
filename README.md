@@ -318,7 +318,9 @@ A few details worth knowing:
 
 - **Upgrading an instance that used `KUBECLAUDE_AUTH_TOKEN`** does not open a window: the
   setup screen requires that token before it will set a password, so whoever gets there
-  first cannot claim the instance.
+  first cannot claim the instance. It asks for it up front — the field is on the form from
+  the start, not behind a disclosure you have to find after being refused — and the value
+  is the same `KUBECLAUDE_AUTH_TOKEN` the deployment runs with.
 - **`AUTH_METHOD` in the environment wins**, and the UI shows the method as locked. That
   is for the GitOps case: the cluster decides this instance sits behind an SSO proxy, and
   nothing inside the app should be able to turn that off.

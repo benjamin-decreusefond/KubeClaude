@@ -76,8 +76,11 @@ export function describeError(error: unknown): string {
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   if (init.body) headers.set('Content-Type', 'application/json');
+  // An explicit header wins: first-run setup presents a token it has not
+  // stored yet, and storing a token that turns out to be wrong would break
+  // every later request silently.
   const token = getToken();
-  if (token) headers.set('Authorization', `Bearer ${token}`);
+  if (token && !headers.has('Authorization')) headers.set('Authorization', `Bearer ${token}`);
 
   const response = await fetch(path, { ...init, headers });
   if (response.status === 204) return undefined as T;
@@ -94,10 +97,11 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export const api = {
   authState: () => request<AuthState>('/api/auth/state'),
-  setupAuth: (input: SetupInput) =>
+  setupAuth: (input: SetupInput, staticToken?: string) =>
     request<AuthState & { apiKey: string }>('/api/auth/setup', {
       method: 'POST',
       body: JSON.stringify(input),
+      headers: staticToken ? { Authorization: `Bearer ${staticToken}` } : undefined,
     }),
   login: (username: string, password: string) =>
     request<AuthState>('/api/auth/login', {
