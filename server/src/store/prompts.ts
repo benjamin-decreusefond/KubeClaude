@@ -12,6 +12,8 @@ interface PromptRow {
   enabled: number;
   model: string | null;
   working_dir: string | null;
+  repo_url: string | null;
+  repo_ref: string | null;
   permission_mode: string;
   allowed_tools: string;
   disallowed_tools: string;
@@ -46,6 +48,8 @@ function toPrompt(row: PromptRow): Prompt {
     enabled: boolFromDb(row.enabled),
     model: row.model,
     workingDir: row.working_dir,
+    repoUrl: row.repo_url,
+    repoRef: row.repo_ref,
     permissionMode: row.permission_mode as PermissionMode,
     allowedTools: jsonFromDb<string[]>(row.allowed_tools, []),
     disallowedTools: jsonFromDb<string[]>(row.disallowed_tools, []),
@@ -108,12 +112,12 @@ export function createPrompt(input: PromptInput): Prompt {
   const id = randomUUID();
   db.prepare(
     `INSERT INTO prompts (
-       id, kind, title, name, description, prompt, enabled, model, working_dir, permission_mode,
+       id, kind, title, name, description, prompt, enabled, model, working_dir, repo_url, repo_ref, permission_mode,
        allowed_tools, disallowed_tools, append_system_prompt, max_turns, timeout_seconds,
        env, mcp_config, mcp_server_ids, settings_json, claude_md, continue_session, last_session_id,
        auto_resume, max_auto_resumes, resume_prompt, completion_check, completion_marker,
        judge_model, created_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
     input.kind,
@@ -124,6 +128,8 @@ export function createPrompt(input: PromptInput): Prompt {
     boolToDb(input.enabled),
     input.model,
     input.workingDir,
+    input.repoUrl,
+    input.repoRef,
     input.permissionMode,
     JSON.stringify(input.allowedTools),
     JSON.stringify(input.disallowedTools),
@@ -157,6 +163,8 @@ const COLUMN_BY_FIELD: Record<string, string> = {
   enabled: 'enabled',
   model: 'model',
   workingDir: 'working_dir',
+  repoUrl: 'repo_url',
+  repoRef: 'repo_ref',
   permissionMode: 'permission_mode',
   allowedTools: 'allowed_tools',
   disallowedTools: 'disallowed_tools',

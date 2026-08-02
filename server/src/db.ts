@@ -273,6 +273,19 @@ const MIGRATIONS: Array<{ name: string; up: string }> = [
       CREATE INDEX idx_app_errors_seen ON app_errors(last_seen_at DESC);
     `,
   },
+  {
+    name: '006_repositories',
+    up: `
+      /*
+       * A prompt can name a repository to work in. KubeClaude clones it on the
+       * first run and puts the working directory back on the remote before
+       * every run after that, so a prompt is about the change it wants rather
+       * than about remembering how to get a checkout.
+       */
+      ALTER TABLE prompts ADD COLUMN repo_url TEXT;
+      ALTER TABLE prompts ADD COLUMN repo_ref TEXT;
+    `,
+  },
 ];
 
 export function migrate(): void {

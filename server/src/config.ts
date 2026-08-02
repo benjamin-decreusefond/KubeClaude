@@ -74,6 +74,14 @@ export const config = {
    * unable to reach the cluster at all.
    */
   exposeKubernetes: bool('EXPOSE_KUBERNETES', true),
+  /**
+   * Forward GITHUB_TOKEN / GH_TOKEN into runs, so `git` and `gh` are
+   * authenticated without every prompt carrying a copy of the credential. They
+   * only exist in the pod if somebody put them there deliberately, and that is
+   * only ever done so that runs can use them — but the switch is here for a
+   * deployment that wants the token available to KubeClaude and not to Claude.
+   */
+  exposeGitHubToken: bool('EXPOSE_GITHUB_TOKEN', true),
 
   /** Serve the built SPA from the server. */
   serveWeb: bool('SERVE_WEB', true),

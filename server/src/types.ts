@@ -53,6 +53,10 @@ export interface Prompt {
   enabled: boolean;
   model: string | null;
   workingDir: string | null;
+  /** Repository cloned into the working directory before each run, if any. */
+  repoUrl: string | null;
+  /** Branch, tag or commit to check out; null means the remote's default. */
+  repoRef: string | null;
   permissionMode: PermissionMode;
   allowedTools: string[];
   disallowedTools: string[];
@@ -286,6 +290,9 @@ export interface Settings {
   /** Timezone used for new cron triggers and for UI date rendering. */
   timezone: string;
   /** Master switch for resuming rate-limited runs when the quota returns. */
+  /** Identity every commit a run makes is authored with. */
+  gitUserName: string;
+  gitUserEmail: string;
   autoResumeEnabled: boolean;
   /** Grace period after a quota reset before a resume is attempted. */
   autoResumeDelayMinutes: number;

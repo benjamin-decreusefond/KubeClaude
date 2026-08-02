@@ -22,6 +22,29 @@ const jsonText = (label: string) =>
 
 export const permissionModeSchema = z.enum(['default', 'acceptEdits', 'plan', 'bypassPermissions']);
 
+/**
+ * A remote git can be reached at. Anything else — a local path, a `file://`,
+ * something with a shell metacharacter in it — is refused: this string is handed
+ * to `git clone`, and a prompt naming a path on the pod's disk is either a
+ * mistake or an attempt to read something it should not.
+ */
+export const repoUrlSchema = z
+  .string()
+  .max(500)
+  .refine(
+    (value) => /^https:\/\/[^\s]+$/.test(value) || /^(ssh:\/\/)?git@[^\s]+:[^\s]+$/.test(value),
+    { message: 'Use an https:// or git@host:owner/repo URL' },
+  )
+  .nullable();
+
+/** A branch, tag or commit. Git's own rules, minus the ways to smuggle a flag. */
+export const repoRefSchema = z
+  .string()
+  .max(200)
+  .regex(/^[A-Za-z0-9._/-]+$/, 'Use a branch, tag or commit')
+  .refine((value) => !value.startsWith('-') && !value.includes('..'), { message: 'Not a valid ref' })
+  .nullable();
+
 export const promptCreateSchema = z.object({
   name: z.string().min(1).max(120),
   description: z.string().max(2000).default(''),
@@ -29,6 +52,8 @@ export const promptCreateSchema = z.object({
   enabled: z.boolean().default(true),
   model: z.string().max(120).nullable().default(null),
   workingDir: z.string().max(1024).nullable().default(null),
+  repoUrl: repoUrlSchema.default(null),
+  repoRef: repoRefSchema.default(null),
   permissionMode: permissionModeSchema.default('default'),
   allowedTools: z.array(z.string()).default([]),
   disallowedTools: z.array(z.string()).default([]),
@@ -151,6 +176,15 @@ export const settingsUpdateSchema = z.object({
   globalEnv: envRecord.optional(),
   environmentBriefing: z.string().max(50_000).optional(),
   timezone: z.string().max(80).optional(),
+  gitUserName: z.string().min(1).max(120).optional(),
+  // Git's own rule, which is looser than an internet address: our default is
+  // `kubeclaude@localhost`, and a host that has no dot in it is perfectly valid.
+  gitUserEmail: z
+    .string()
+    .min(3)
+    .max(200)
+    .regex(/^[^\s@]+@[^\s@]+$/, 'Use an address of the form name@host')
+    .optional(),
   autoResumeEnabled: z.boolean().optional(),
   autoResumeDelayMinutes: z.number().int().min(0).max(1440).optional(),
 });
@@ -162,6 +196,8 @@ export const settingsUpdateSchema = z.object({
 const goalPromptSchema = z.object({
   model: z.string().max(120).nullable().default(null),
   workingDir: z.string().max(1024).nullable().default(null),
+  repoUrl: repoUrlSchema.default(null),
+  repoRef: repoRefSchema.default(null),
   permissionMode: permissionModeSchema.default('bypassPermissions'),
   allowedTools: z.array(z.string()).default([]),
   disallowedTools: z.array(z.string()).default([]),

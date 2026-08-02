@@ -20,6 +20,8 @@ export function Chats() {
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('bypassPermissions');
   const [mcpServerIds, setMcpServerIds] = useState<string[]>([]);
   const [workingDir, setWorkingDir] = useState('');
+  const [repoUrl, setRepoUrl] = useState('');
+  const [repoRef, setRepoRef] = useState('');
   const [fromPromptId, setFromPromptId] = useState('');
   const [advanced, setAdvanced] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -36,6 +38,8 @@ export function Chats() {
         permissionMode,
         mcpServerIds,
         workingDir: workingDir || null,
+        repoUrl: repoUrl || null,
+        repoRef: repoRef || null,
         fromPromptId: fromPromptId || undefined,
       });
       navigate(`/chats/${chat.id}`);
@@ -130,6 +134,24 @@ export function Chats() {
                 <option value="plan">plan — research only</option>
                 <option value="default">default — deny anything needing approval</option>
               </select>
+            </Field>
+
+            <Field label="Repository" hint="Cloned before the first message is answered.">
+              <input
+                type="text"
+                value={repoUrl}
+                onChange={(event) => setRepoUrl(event.target.value)}
+                placeholder="https://github.com/owner/repo.git"
+              />
+            </Field>
+
+            <Field label="Branch" hint="Empty means the remote's default.">
+              <input
+                type="text"
+                value={repoRef}
+                onChange={(event) => setRepoRef(event.target.value)}
+                placeholder="main"
+              />
             </Field>
 
             <Field label="Working directory" hint="Leave empty for a fresh managed workspace.">

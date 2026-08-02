@@ -4,6 +4,7 @@ import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { claudeCredentials, config, forwardedEnvPrefixes } from '../config.js';
+import { DEFAULT_GIT_IDENTITY, prepareRepository, writeGitConfig, type GitIdentity } from './git.js';
 import { buildMcpDocument } from '../store/mcp.js';
 import { weighTokens } from '../store/usage.js';
 import type { BudgetBasis, ModelUsage, Prompt, UsageTotals } from '../types.js';
@@ -22,6 +23,8 @@ export interface RunnerOptions {
   /** Extra env for this invocation only, merged last. */
   extraEnv?: Record<string, string>;
   globalEnv?: Record<string, string>;
+  /** Who commits made during the run are authored by. */
+  gitIdentity?: GitIdentity;
   defaultModel?: string | null;
   /** Turn cap for a prompt that does not pin its own; 0 means uncapped. */
   defaultMaxTurns?: number;
@@ -97,6 +100,26 @@ function buildEnv(options: RunnerOptions, home: string): NodeJS.ProcessEnv {
     }
   }
 
+  // `git` and `gh` read different variables; a deployment that set either one
+  // meant both, so they are mirrored rather than left half-configured.
+  if (config.exposeGitHubToken) {
+    const token = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN;
+    if (token) {
+      base.GITHUB_TOKEN = token;
+      base.GH_TOKEN = token;
+    }
+  }
+
+  // Belt and braces alongside the gitconfig: a repository that arrived with its
+  // own committer configuration cannot leave a run unable to commit.
+  const identity = options.gitIdentity ?? DEFAULT_GIT_IDENTITY;
+  base.GIT_AUTHOR_NAME = identity.name;
+  base.GIT_AUTHOR_EMAIL = identity.email;
+  base.GIT_COMMITTER_NAME = identity.name;
+  base.GIT_COMMITTER_EMAIL = identity.email;
+  // Nobody is watching, so git must fail rather than wait for a password.
+  base.GIT_TERMINAL_PROMPT = '0';
+
   for (const [key, value] of Object.entries(process.env)) {
     if (value === undefined) continue;
     if (forwardedEnvPrefixes.some((prefix) => key.startsWith(prefix))) base[key] = value;
@@ -125,6 +148,25 @@ async function prepare(options: RunnerOptions): Promise<PreparedInvocation> {
 
   const home = config.claudeHome;
   await fsp.mkdir(path.join(home, '.claude'), { recursive: true });
+
+  const env = buildEnv(options, home);
+
+  // Identity and credentials first, so the clone below and everything the run
+  // does afterwards are already authenticated and attributable.
+  await writeGitConfig(home, options.gitIdentity ?? DEFAULT_GIT_IDENTITY);
+
+  if (prompt.repoUrl?.trim()) {
+    // Throwing here fails the run, which is the point: a prompt that names a
+    // repository is about that repository, and running it against a stale or
+    // missing checkout would do the wrong work convincingly.
+    await prepareRepository({
+      url: prompt.repoUrl.trim(),
+      ref: prompt.repoRef,
+      dir: cwd,
+      env,
+      onEvent: (payload) => options.onEvent('system', payload),
+    });
+  }
 
   // Per-run scratch for the config files we hand to the CLI.
   const scratch = await fsp.mkdtemp(path.join(os.tmpdir(), `kubeclaude-${options.runId.slice(0, 8)}-`));
@@ -197,7 +239,7 @@ async function prepare(options: RunnerOptions): Promise<PreparedInvocation> {
 
   if (options.resumeSessionId) args.push('--resume', options.resumeSessionId);
 
-  return { args, cwd, env: buildEnv(options, home), cleanup };
+  return { args, cwd, env, cleanup };
 }
 
 /** Marks a CLAUDE.md as ours, so a later run knows it may be replaced. */

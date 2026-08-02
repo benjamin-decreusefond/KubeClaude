@@ -77,8 +77,19 @@ export async function systemRoutes(app: FastifyInstance): Promise<void> {
         available: await onPath(name),
       })),
     );
+    const settings = getSettings();
     return {
       tools,
+      /**
+       * What a run's git will do before it is asked to. The token is reported
+       * as present or not, never echoed.
+       */
+      git: {
+        userName: settings.gitUserName,
+        userEmail: settings.gitUserEmail,
+        githubToken: config.exposeGitHubToken && Boolean(process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN),
+        tokenWithheld: !config.exposeGitHubToken && Boolean(process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN),
+      },
       credentials: {
         configured: hasCredentials(),
         mode: billingMode(),

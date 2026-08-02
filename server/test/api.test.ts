@@ -494,6 +494,81 @@ test('status reports the build, the quota and what the runs can reach', async ()
 });
 
 // --------------------------------------------------------------------------
+// Repositories
+// --------------------------------------------------------------------------
+
+test('a prompt can name a repository, and only a real remote', async () => {
+  const created = await kube.request({
+    method: 'POST',
+    url: '/api/prompts',
+    payload: {
+      name: 'with-repo',
+      prompt: 'fix the failing test and open a pull request',
+      repoUrl: 'https://github.com/owner/repo.git',
+      repoRef: 'main',
+    },
+  });
+  assert.equal(created.status, 201);
+  const prompt = created.json<{ id: string; repoUrl: string; repoRef: string }>();
+  assert.equal(prompt.repoUrl, 'https://github.com/owner/repo.git');
+  assert.equal(prompt.repoRef, 'main');
+
+  // A path on the pod's disk is not a remote, and handing one to `git clone`
+  // is either a mistake or an attempt to read something else on the volume.
+  for (const repoUrl of ['/data/kubeclaude.db', 'file:///etc', 'ext::sh -c whoami']) {
+    const refused = await kube.request({
+      method: 'POST',
+      url: '/api/prompts',
+      payload: { name: `bad-${repoUrl.length}`, prompt: 'x', repoUrl },
+    });
+    assert.equal(refused.status, 400, `${repoUrl} should be refused`);
+  }
+
+  // Nor is a ref that could be read as a flag.
+  const badRef = await kube.request({
+    method: 'PATCH',
+    url: `/api/prompts/${prompt.id}`,
+    payload: { repoRef: '--upload-pack=touch /tmp/pwned' },
+  });
+  assert.equal(badRef.status, 400);
+
+  // ssh remotes are fine — a deployment with a deploy key is a normal setup.
+  const ssh = await kube.request({
+    method: 'PATCH',
+    url: `/api/prompts/${prompt.id}`,
+    payload: { repoUrl: 'git@github.com:owner/repo.git' },
+  });
+  assert.equal(ssh.status, 200);
+
+  assert.equal((await kube.request({ method: 'DELETE', url: `/api/prompts/${prompt.id}` })).status, 204);
+});
+
+test('the git identity is a setting, and capabilities says whether a token is there', async () => {
+  const updated = await kube.request({
+    method: 'PATCH',
+    url: '/api/settings',
+    payload: { gitUserName: 'KubeClaude Bot', gitUserEmail: 'bot@example.com' },
+  });
+  assert.equal(updated.status, 200);
+  assert.equal(updated.json<{ gitUserName: string }>().gitUserName, 'KubeClaude Bot');
+
+  // An address git will accept, or nothing.
+  const refused = await kube.request({
+    method: 'PATCH',
+    url: '/api/settings',
+    payload: { gitUserEmail: 'not-an-address' },
+  });
+  assert.equal(refused.status, 400);
+
+  const capabilities = await kube.request({ method: 'GET', url: '/api/capabilities' });
+  const git = capabilities.json<{ git: { userEmail: string; githubToken: boolean } }>().git;
+  assert.equal(git.userEmail, 'bot@example.com');
+  // Reported as present or absent, never echoed.
+  assert.equal(typeof git.githubToken, 'boolean');
+  assert.ok(!capabilities.body.includes('ghp_'), 'a token must never be returned');
+});
+
+// --------------------------------------------------------------------------
 // Completion in the composer
 // --------------------------------------------------------------------------
 

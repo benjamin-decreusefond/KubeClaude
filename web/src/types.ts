@@ -113,6 +113,8 @@ export interface CreateGoalInput {
   startNow: boolean;
   model: string | null;
   workingDir: string | null;
+  repoUrl: string | null;
+  repoRef: string | null;
   permissionMode: PermissionMode;
   allowedTools: string[];
   disallowedTools: string[];
@@ -134,6 +136,8 @@ export interface UpdateGoalInput {
   keepSession?: boolean;
   model?: string | null;
   workingDir?: string | null;
+  repoUrl?: string | null;
+  repoRef?: string | null;
   permissionMode?: PermissionMode;
   allowedTools?: string[];
   disallowedTools?: string[];
@@ -152,6 +156,10 @@ export interface Prompt {
   enabled: boolean;
   model: string | null;
   workingDir: string | null;
+  /** Repository cloned into the working directory before each run, if any. */
+  repoUrl: string | null;
+  /** Branch, tag or commit to check out; null means the remote's default. */
+  repoRef: string | null;
   permissionMode: PermissionMode;
   allowedTools: string[];
   disallowedTools: string[];
@@ -306,6 +314,8 @@ export interface Settings {
   globalEnv: Record<string, string>;
   environmentBriefing: string;
   timezone: string;
+  gitUserName: string;
+  gitUserEmail: string;
   autoResumeEnabled: boolean;
   autoResumeDelayMinutes: number;
 }
@@ -398,6 +408,7 @@ export interface Status {
 
 export interface Capabilities {
   tools: Array<{ name: string; available: boolean }>;
+  git: { userName: string; userEmail: string; githubToken: boolean; tokenWithheld: boolean };
   credentials: { configured: boolean; mode: BillingMode; variables: string[]; ignored: string[] };
   forwardedEnvPrefixes: string[];
   forwardedEnvNames: string[];
@@ -425,6 +436,8 @@ export interface StartChatInput {
   model?: string | null;
   permissionMode?: PermissionMode;
   workingDir?: string | null;
+  repoUrl?: string | null;
+  repoRef?: string | null;
   allowedTools?: string[];
   disallowedTools?: string[];
   mcpServerIds?: string[];
