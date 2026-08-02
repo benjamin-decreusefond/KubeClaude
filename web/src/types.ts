@@ -28,6 +28,8 @@ export interface AuthState {
   via: 'session' | 'basic' | 'proxy' | 'api-key' | 'local' | 'open' | null;
   /** Pinned by AUTH_METHOD in the environment, so the app cannot change it. */
   locked: boolean;
+  /** Setting the first password requires presenting KUBECLAUDE_AUTH_TOKEN. */
+  staticTokenRequired: boolean;
   local: boolean;
 }
 
