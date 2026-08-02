@@ -36,3 +36,14 @@ test('does not treat a discussion of limits in output as a limit hit', () => {
   // "limit" alone must not match; only the specific phrasings do.
   assert.equal(detectRateLimit('I set a limit of 5 retries in the config').limited, false);
 });
+
+test('a reset that looks like a date but is not one leaves the limit readable', () => {
+  // The pattern matches the shape, not a real date. Parsing this and calling
+  // toISOString() throws, and the throw would turn a quota stop into a plain
+  // failure — losing the automatic resume that is the whole point of detecting
+  // it. A date we cannot read is simply no date.
+  const info = detectRateLimit('weekly limit reached, resets at 2026-13-45T99:99');
+  assert.equal(info.limited, true);
+  assert.equal(info.scope, 'weekly');
+  assert.equal(info.resetAt, null);
+});

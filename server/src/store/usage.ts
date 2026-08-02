@@ -65,32 +65,50 @@ export function listWindows(kind: WindowKind, limit = 20): UsageWindow[] {
  * message after a reset.
  */
 export function openWindows(at: Date = new Date()): Record<WindowKind, UsageWindow> {
-  const open = (kind: WindowKind): UsageWindow => {
-    const existing = getActiveWindow(kind, at);
-    if (existing) {
-      db.prepare('UPDATE usage_windows SET run_count = run_count + 1 WHERE id = ?').run(existing.id);
-      return { ...existing, runCount: existing.runCount + 1 };
-    }
-    const id = randomUUID();
-    const endsAt = new Date(at.getTime() + windowDurationMs(kind)).toISOString();
-    db.prepare(
-      'INSERT INTO usage_windows (id, kind, started_at, ends_at, run_count) VALUES (?, ?, ?, ?, 1)',
-    ).run(id, kind, at.toISOString(), endsAt);
-    return {
-      id,
-      kind,
-      startedAt: at.toISOString(),
-      endsAt,
-      inputTokens: 0,
-      outputTokens: 0,
-      cacheCreationTokens: 0,
-      cacheReadTokens: 0,
-      totalTokens: 0,
-      costUsd: 0,
-      runCount: 1,
-    };
+  return { session: openWindow('session', at, true), weekly: openWindow('weekly', at, true) };
+}
+
+/**
+ * The windows covering `at`, without counting a run against them.
+ *
+ * Spend is booked when a run reports it, which can be in a later window than
+ * the one it started in — a long run outlives a 5-hour window. Booking it back
+ * to the window it started in would leave the tokens in a window nothing
+ * consults again, and the guard would see the live window as emptier than it
+ * is. Erring towards the live window protects the budget rather than the
+ * bookkeeping.
+ */
+export function currentWindows(at: Date = new Date()): Record<WindowKind, UsageWindow> {
+  return { session: openWindow('session', at, false), weekly: openWindow('weekly', at, false) };
+}
+
+function openWindow(kind: WindowKind, at: Date, countRun: boolean): UsageWindow {
+  const existing = getActiveWindow(kind, at);
+  if (existing) {
+    if (!countRun) return existing;
+    db.prepare('UPDATE usage_windows SET run_count = run_count + 1 WHERE id = ?').run(existing.id);
+    return { ...existing, runCount: existing.runCount + 1 };
+  }
+
+  const id = randomUUID();
+  const runCount = countRun ? 1 : 0;
+  const endsAt = new Date(at.getTime() + windowDurationMs(kind)).toISOString();
+  db.prepare(
+    'INSERT INTO usage_windows (id, kind, started_at, ends_at, run_count) VALUES (?, ?, ?, ?, ?)',
+  ).run(id, kind, at.toISOString(), endsAt, runCount);
+  return {
+    id,
+    kind,
+    startedAt: at.toISOString(),
+    endsAt,
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheCreationTokens: 0,
+    cacheReadTokens: 0,
+    totalTokens: 0,
+    costUsd: 0,
+    runCount,
   };
-  return { session: open('session'), weekly: open('weekly') };
 }
 
 export function addUsage(windowId: string, totals: UsageTotals): void {

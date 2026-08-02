@@ -53,6 +53,8 @@ export interface ColumnPoint {
  * sequential hue and no legend box is needed — the card title says what it is.
  */
 export function ColumnChart({ points, tickEvery = 2 }: { points: ColumnPoint[]; tickEvery?: number }) {
+  if (points.length === 0) return <div className="empty">Nothing to plot yet.</div>;
+
   const max = Math.max(...points.map((point) => point.value), 1);
   const peak = points.reduce((best, point) => (point.value > best.value ? point : best), points[0]!);
 

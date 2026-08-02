@@ -104,6 +104,12 @@ export async function runRoutes(app: FastifyInstance): Promise<void> {
     if (!run) return reply.code(404).send({ error: 'Run not found' });
     const prompt = getPrompt(run.promptId);
     if (!prompt) return reply.code(404).send({ error: 'Prompt not found' });
+    // Resuming a run that has not stopped would put a second Claude on the same
+    // session, and spend the quota twice on the same piece of work. The
+    // follow-up route refuses this for the same reason.
+    if (run.status === 'queued' || run.status === 'running') {
+      return reply.code(409).send({ error: 'This run has not finished; wait for it or cancel it first' });
+    }
     if (!run.sessionId && run.status === 'succeeded') {
       return reply.code(409).send({ error: 'Nothing to resume' });
     }

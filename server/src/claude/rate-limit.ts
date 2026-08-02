@@ -32,6 +32,17 @@ const LIMIT_PATTERNS: Array<{ re: RegExp; scope: RateLimitInfo['scope'] }> = [
 /** `Your limit will reset at 3pm` / `resets at 2026-07-27T18:00:00Z`. */
 const RESET_ISO = /reset(?:s|ting)?\s+(?:at|on)\s+(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:?\d{2})?)/i;
 
+/**
+ * The reset pattern matches the *shape* of a timestamp, not a real date, so
+ * `2026-13-45T00:00` gets through it. Parsing that and calling `toISOString()`
+ * throws — which would turn a quota stop into a plain failure and cost the run
+ * its automatic resume. A date we cannot read is simply no date.
+ */
+function isoOrNull(raw: string): string | null {
+  const parsed = new Date(raw.replace(' ', 'T'));
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
 function epochToIso(raw: string): string | null {
   const value = Number.parseInt(raw, 10);
   if (!Number.isFinite(value)) return null;
@@ -66,7 +77,7 @@ export function detectRateLimit(...texts: Array<string | null | undefined>): Rat
     const iso = RESET_ISO.exec(haystack);
     return {
       limited: true,
-      resetAt: iso?.[1] ? new Date(iso[1].replace(' ', 'T')).toISOString() : null,
+      resetAt: iso?.[1] ? isoOrNull(iso[1]) : null,
       scope,
       evidence: match[0],
     };
