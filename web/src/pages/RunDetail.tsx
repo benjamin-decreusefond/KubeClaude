@@ -15,6 +15,16 @@ import {
 import { useStream, useTicker } from '../hooks';
 import type { Run, RunEvent } from '../types';
 
+/**
+ * How much live output the page keeps. The server trims its own history, and a
+ * browser holding every line of a long run gets slow long before it runs out of
+ * memory — reloading the page fetches whatever the server still has.
+ */
+const LIVE_EVENT_LIMIT = 2_000;
+
+/** How far back to look for a duplicate; frames arrive in order, give or take. */
+const LIVE_EVENT_WINDOW = 50;
+
 export function RunDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -52,9 +62,15 @@ export function RunDetail() {
       if (event === 'run:event') {
         const runEvent = payload as RunEvent;
         if (runEvent.runId !== id) return;
-        setEvents((current) =>
-          current.some((existing) => existing.seq === runEvent.seq) ? current : [...current, runEvent],
-        );
+        setEvents((current) => {
+          // A run can emit thousands of lines. Scanning the whole list for a
+          // duplicate on every one of them is quadratic, and the tail is the
+          // only part anybody reads — so check the tail and keep the tail.
+          const recent = current.slice(-LIVE_EVENT_WINDOW);
+          if (recent.some((existing) => existing.seq === runEvent.seq)) return current;
+          const next = [...current, runEvent];
+          return next.length > LIVE_EVENT_LIMIT ? next.slice(-LIVE_EVENT_LIMIT) : next;
+        });
       } else if (event === 'run:updated') {
         const updated = payload as Run;
         if (updated.id === id) setRun(updated);

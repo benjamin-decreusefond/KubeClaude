@@ -33,7 +33,10 @@ export const config = {
   schedulerIntervalMs: int('SCHEDULER_INTERVAL_MS', 20_000),
   /** How many Claude runs may execute at the same time. */
   maxConcurrentRuns: int('MAX_CONCURRENT_RUNS', 1),
-  /** Events kept in the DB per run; older ones are trimmed. */
+  /**
+   * Events kept in the DB per run; older ones are trimmed. Enforced in batches,
+   * so a run holds up to a hundred more than this between trims.
+   */
   maxEventsPerRun: int('MAX_EVENTS_PER_RUN', 5_000),
   /** Runs older than this are pruned on startup and daily. 0 disables pruning. */
   runRetentionDays: int('RUN_RETENTION_DAYS', 30),
