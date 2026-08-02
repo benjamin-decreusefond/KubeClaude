@@ -216,6 +216,24 @@ async function prepare(options: RunnerOptions): Promise<PreparedInvocation> {
     options.appendSystemPrompt?.trim(),
   ].filter((part): part is string => Boolean(part));
 
+  // Replaces the CLI's own system prompt. The parts assembled above are still
+  // appended after it, so the briefing and the completion marker survive.
+  if (prompt.systemPrompt?.trim()) args.push('--system-prompt', prompt.systemPrompt.trim());
+  if (prompt.agentsJson?.trim()) args.push('--agents', prompt.agentsJson.trim());
+
+  // Which built-in tools exist at all, as opposed to which may run unattended.
+  // An empty list is meaningful — it hands the CLI no built-in tools — so this
+  // turns on the flag for null-vs-empty rather than for length.
+  if (prompt.builtinTools) args.push('--tools', prompt.builtinTools.join(','));
+
+  // Left alone, the CLI reads the user, project and local settings files —
+  // including the .claude/settings.json of whatever repository this run just
+  // cloned. A prompt that would rather be handed only what KubeClaude gives it
+  // says so here.
+  if (prompt.settingSources) {
+    args.push('--setting-sources', prompt.settingSources === 'none' ? '' : prompt.settingSources);
+  }
+
   if (prompt.allowedTools.length > 0) args.push('--allowed-tools', prompt.allowedTools.join(','));
   if (prompt.disallowedTools.length > 0) args.push('--disallowed-tools', prompt.disallowedTools.join(','));
   if (prompt.permissionMode && prompt.permissionMode !== 'default') {

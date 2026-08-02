@@ -83,6 +83,29 @@ export const repoRefSchema = z
   .refine((value) => !value.startsWith('-') && !value.includes('..'), { message: 'Not a valid ref' })
   .nullable();
 
+/**
+ * Which settings files the CLI reads. `none` is spelled out rather than left as
+ * an empty string so that "read nothing" and "not configured" stay two visibly
+ * different values everywhere they travel.
+ */
+export const settingSourcesSchema = z
+  .string()
+  .max(40)
+  .refine(
+    (value) =>
+      value === 'none' ||
+      (value.length > 0 &&
+        value.split(',').every((part) => ['user', 'project', 'local'].includes(part.trim()))),
+    { message: 'Use none, or a comma-separated subset of user, project, local' },
+  )
+  .nullable();
+
+/** Built-in tool names, as the CLI spells them: Bash, Edit, Read, WebFetch… */
+export const builtinToolsSchema = z
+  .array(z.string().min(1).max(80).regex(/^[A-Za-z0-9_]+$/, 'Use a built-in tool name'))
+  .max(60)
+  .nullable();
+
 export const promptCreateSchema = z.object({
   name: z.string().min(1).max(120),
   description: z.string().max(2000).default(''),
@@ -100,6 +123,10 @@ export const promptCreateSchema = z.object({
   allowedTools: z.array(z.string()).default([]),
   disallowedTools: z.array(z.string()).default([]),
   appendSystemPrompt: z.string().nullable().default(null),
+  systemPrompt: z.string().max(100_000).nullable().default(null),
+  agentsJson: jsonText('Agents definition').default(null),
+  builtinTools: builtinToolsSchema.default(null),
+  settingSources: settingSourcesSchema.default(null),
   maxTurns: z.number().int().positive().max(1000).nullable().default(null),
   timeoutSeconds: z.number().int().min(30).max(86_400).default(1800),
   env: envRecord.default({}),
@@ -254,6 +281,10 @@ const goalPromptSchema = z.object({
   settingsJson: jsonText('Claude settings').default(null),
   claudeMd: z.string().nullable().default(null),
   env: envRecord.default({}),
+  systemPrompt: z.string().max(100_000).nullable().default(null),
+  agentsJson: jsonText('Agents definition').default(null),
+  builtinTools: builtinToolsSchema.default(null),
+  settingSources: settingSourcesSchema.default(null),
   maxTurns: z.number().int().positive().max(1000).nullable().default(null),
   timeoutSeconds: z.number().int().min(30).max(86_400).default(3600),
 });

@@ -131,6 +131,57 @@ test('the CLI execution controls round-trip through the API', async () => {
   await kube.request({ method: 'DELETE', url: `/api/prompts/${prompt.id}` });
 });
 
+test('the context controls round-trip, empty tool set included', async () => {
+  const created = await kube.request({
+    method: 'POST',
+    url: '/api/prompts',
+    payload: {
+      name: 'context-controls',
+      prompt: 'Do the thing',
+      systemPrompt: 'You are a release engineer.',
+      agentsJson: '{"reviewer":{"description":"Reviews code","prompt":"You review"}}',
+      builtinTools: [],
+      settingSources: 'none',
+    },
+  });
+  assert.equal(created.status, 201);
+  const prompt = created.json<{ id: string; builtinTools: string[] | null; settingSources: string }>();
+  // The distinction the whole encoding exists for: [] survives as [], not null.
+  assert.deepEqual(prompt.builtinTools, []);
+  assert.equal(prompt.settingSources, 'none');
+
+  const narrowed = await kube.request({
+    method: 'PATCH',
+    url: `/api/prompts/${prompt.id}`,
+    payload: { builtinTools: ['Bash', 'Read'] },
+  });
+  assert.deepEqual(narrowed.json<{ builtinTools: string[] }>().builtinTools, ['Bash', 'Read']);
+
+  const cleared = await kube.request({
+    method: 'PATCH',
+    url: `/api/prompts/${prompt.id}`,
+    payload: { builtinTools: null },
+  });
+  assert.equal(cleared.json<{ builtinTools: string[] | null }>().builtinTools, null);
+
+  await kube.request({ method: 'DELETE', url: `/api/prompts/${prompt.id}` });
+});
+
+test('a context control the CLI would not accept is refused', async () => {
+  for (const payload of [
+    { settingSources: 'everything' },
+    { builtinTools: ['Bash(rm -rf /)'] },
+    { agentsJson: 'not json' },
+  ]) {
+    const response = await kube.request({
+      method: 'POST',
+      url: '/api/prompts',
+      payload: { name: `bad-context-${JSON.stringify(payload).length}`, prompt: 'x', ...payload },
+    });
+    assert.equal(response.status, 400, `should refuse ${JSON.stringify(payload)}`);
+  }
+});
+
 test('an execution control the CLI would not accept is refused', async () => {
   for (const payload of [
     { effort: 'extreme' },

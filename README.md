@@ -604,6 +604,33 @@ across two checkouts — read the manifests in one repository, change the code i
 None of the four is passed to the CLI unless something asked for it, so a prompt that
 leaves them alone invokes exactly the command it did before.
 
+## Choosing what a run is made of
+
+Four more, on the prompt's Advanced tab, about what the run *has* rather than what it
+spends:
+
+**Built-in tools.** `--tools`. Which tools the model is told exist at all — distinct
+from the allow list, which decides what may run without asking. Every tool carries its
+schema in the system prompt of *every* request, so a prompt that only ever reads files
+pays for WebFetch on every turn until you take it away. Three states, and the difference
+matters: leave it alone for the CLI's full set, list the ones to keep, or hand it none.
+
+**Custom subagents.** `--agents`, a JSON object of `{name: {description, prompt}}`. The
+run can delegate to them the way it would to a built-in agent, without any of it having
+to live in a repository.
+
+**A replacement system prompt.** `--system-prompt`, as opposed to the appended one. It
+replaces Claude Code's own — everything it says about being an agent with tools
+included — so it is the flag to leave alone unless replacing exactly that is the point.
+The environment briefing and the completion marker are still appended after it, so
+KubeClaude's own context survives either way.
+
+**Which settings files are read.** `--setting-sources`. Left alone the CLI reads the
+user, project and local settings, and the *project* one belongs to whatever repository
+the run just cloned — its hooks, its permissions, its MCP servers. A prompt that works
+in somebody else's repository can narrow this to `user`, or to `none`, and be handed
+only what KubeClaude gives it.
+
 ## Spending less
 
 KubeClaude does not control tokenization, prompt caching or compaction — the CLI owns

@@ -301,6 +301,23 @@ const MIGRATIONS: Array<{ name: string; up: string }> = [
       ALTER TABLE prompts ADD COLUMN add_dirs TEXT NOT NULL DEFAULT '[]';
     `,
   },
+  {
+    name: '008_context_controls',
+    up: `
+      /*
+       * What a run is made of, rather than what it spends: a system prompt that
+       * replaces the CLI's own, custom subagents, the built-in tool set, and
+       * which settings files are read. All NULL by default, and NULL means
+       * "leave the CLI alone" everywhere — an empty list is a different thing
+       * from an absent one, which is why builtin_tools is nullable JSON rather
+       * than a defaulted array.
+       */
+      ALTER TABLE prompts ADD COLUMN system_prompt TEXT;
+      ALTER TABLE prompts ADD COLUMN agents_json TEXT;
+      ALTER TABLE prompts ADD COLUMN builtin_tools TEXT;
+      ALTER TABLE prompts ADD COLUMN setting_sources TEXT;
+    `,
+  },
 ];
 
 export function migrate(): void {
