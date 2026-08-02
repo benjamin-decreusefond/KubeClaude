@@ -414,6 +414,8 @@ export interface Status {
   maxConcurrentRuns: number;
   activeRuns: number;
   queuedRuns: number;
+  /** Those queued runs, by the kind of prompt that owns them. */
+  queuedByKind: Record<string, number>;
   awaitingResume: number;
   /** Distinct faults in the error feed, so the sidebar can flag them. */
   errorCount: number;

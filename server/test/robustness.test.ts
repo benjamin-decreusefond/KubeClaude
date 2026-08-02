@@ -385,6 +385,33 @@ test('running out of turns says which ceiling was hit, not just "failed"', async
   assert.equal(marked?.cap, 30);
 });
 
+test('a queued goal iteration is not counted as queued work on the prompts page', () => {
+  const scheduled = makePrompt();
+  const goalPrompt = makePrompt({ kind: 'goal', name: 'queued-goal' });
+
+  runStore.createRun({
+    promptId: scheduled.id,
+    promptName: scheduled.name,
+    triggerId: null,
+    triggerType: 'cron',
+    promptText: 'go',
+  });
+  runStore.createRun({
+    promptId: goalPrompt.id,
+    promptName: goalPrompt.name,
+    triggerId: null,
+    triggerType: 'goal',
+    promptText: 'iterate',
+  });
+
+  const queued = runStore.countQueuedByKind();
+  // A goal owns a hidden prompt. Counting its iteration under `scheduled` is
+  // what put "1 queued" above a Prompts page that had nothing to show.
+  assert.equal(queued.scheduled, 1);
+  assert.equal(queued.goal, 1);
+  assert.equal(queued.chat, undefined);
+});
+
 test('a chatty run does not grow its event log without bound', () => {
   const prompt = makePrompt();
   const run = runStore.createRun({

@@ -9,6 +9,7 @@ import type { Run, RunStatus } from '../types';
 const FILTERS: Array<{ label: string; status?: RunStatus }> = [
   { label: 'All' },
   { label: 'Running', status: 'running' },
+  { label: 'Queued', status: 'queued' },
   { label: 'Awaiting quota', status: 'rate_limited' },
   { label: 'Succeeded', status: 'succeeded' },
   { label: 'Failed', status: 'failed' },
@@ -27,6 +28,22 @@ export function Runs() {
     15_000,
     [status, page],
   );
+
+  const [cancelling, setCancelling] = useState<string | null>(null);
+
+  /**
+   * Stopping a run from the list rather than from inside it.
+   *
+   * A queued goal iteration is reachable nowhere else — it has no prompt page
+   * and no chat — so without this the only way to stop one was to know its run
+   * URL.
+   */
+  const cancel = async (id: string) => {
+    setCancelling(id);
+    await api.cancelRun(id).catch(() => undefined);
+    setCancelling(null);
+    refresh();
+  };
 
   const choose = (next: RunStatus | undefined) => {
     setStatus(next);
@@ -90,6 +107,7 @@ export function Runs() {
                   <th className="num">Tokens</th>
                   <th className="num">Cost</th>
                   <th>Status</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -108,6 +126,17 @@ export function Runs() {
                     <td className="num muted">{formatCost(run.costUsd)}</td>
                     <td>
                       <StatusBadge status={run.status} />
+                    </td>
+                    <td className="num">
+                      {(run.status === 'queued' || run.status === 'running') && (
+                        <button
+                          className="ghost small"
+                          disabled={cancelling === run.id}
+                          onClick={() => void cancel(run.id)}
+                        >
+                          {run.status === 'queued' ? 'Cancel' : 'Stop'}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
