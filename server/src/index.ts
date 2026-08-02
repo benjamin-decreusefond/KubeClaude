@@ -7,6 +7,7 @@ import { beginShutdown, drain } from './queue.js';
 import { startScheduler, stopScheduler } from './scheduler.js';
 import { buildServer } from './server.js';
 import { getAuthConfig, pruneSessions } from './store/auth.js';
+import { recordError } from './store/errors.js';
 import { failOrphanedRuns, pruneOldRuns } from './store/runs.js';
 
 async function main(): Promise<void> {
@@ -74,6 +75,22 @@ async function main(): Promise<void> {
     await app.close().catch(() => undefined);
     process.exit(0);
   };
+
+  /*
+   * A throw nothing caught used to reach stdout and stop there. The process
+   * survives either of these — Node's default for a rejection would not — but
+   * the point is that the fault is written down where the UI can show it, rather
+   * than living in a log nobody is tailing.
+   */
+  process.on('uncaughtException', (error: Error) => {
+    logger.error({ err: error.stack ?? error.message }, 'uncaught exception');
+    recordError({ source: 'server', message: error.message, detail: error.stack ?? null, context: 'uncaughtException' });
+  });
+  process.on('unhandledRejection', (reason: unknown) => {
+    const error = reason instanceof Error ? reason : new Error(String(reason));
+    logger.error({ err: error.stack ?? error.message }, 'unhandled rejection');
+    recordError({ source: 'server', message: error.message, detail: error.stack ?? null, context: 'unhandledRejection' });
+  });
 
   process.on('SIGTERM', () => void shutdown('SIGTERM'));
   process.on('SIGINT', () => void shutdown('SIGINT'));

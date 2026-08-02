@@ -12,6 +12,7 @@ const PAGES: Array<{ path: string; heading: string }> = [
   { path: '/goals', heading: 'Goals' },
   { path: '/runs', heading: 'Runs' },
   { path: '/mcp', heading: 'MCP connections' },
+  { path: '/errors', heading: 'Errors' },
   { path: '/settings', heading: 'Settings' },
 ];
 

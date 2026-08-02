@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
 import { config } from './config.js';
+import { logger } from './logger.js';
 
 export const db = openDatabase(config.dbPath);
 
@@ -245,6 +246,33 @@ const MIGRATIONS: Array<{ name: string; up: string }> = [
       CREATE INDEX idx_auth_sessions_expiry ON auth_sessions(expires_at);
     `,
   },
+  {
+    name: '005_errors',
+    up: `
+      /*
+       * Things that went wrong where nobody was watching: a request that threw,
+       * a rejection nothing handled, a browser that failed to render. They used
+       * to go to stdout and to nowhere respectively, which is fine for a person
+       * with a terminal open and useless for a loop asked to "fix the bugs".
+       *
+       * One row per distinct error rather than per occurrence — a broken poll
+       * fires every fifteen seconds, and a feed it floods is a feed nobody
+       * reads.
+       */
+      CREATE TABLE app_errors (
+        id TEXT PRIMARY KEY,
+        fingerprint TEXT NOT NULL UNIQUE,
+        source TEXT NOT NULL,
+        message TEXT NOT NULL,
+        detail TEXT,
+        context TEXT,
+        count INTEGER NOT NULL DEFAULT 1,
+        first_seen_at TEXT NOT NULL,
+        last_seen_at TEXT NOT NULL
+      );
+      CREATE INDEX idx_app_errors_seen ON app_errors(last_seen_at DESC);
+    `,
+  },
 ];
 
 export function migrate(): void {
@@ -257,14 +285,74 @@ export function migrate(): void {
     db.prepare<[], { name: string }>('SELECT name FROM schema_migrations').all().map((r) => r.name),
   );
 
+  const pending = MIGRATIONS.filter((migration) => !applied.has(migration.name));
+  if (pending.length === 0) return;
+  // Nothing to lose on a database that has never been migrated.
+  if (applied.size > 0) backupDatabase(pending[0]!.name);
+
   const record = db.prepare('INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)');
-  for (const migration of MIGRATIONS) {
-    if (applied.has(migration.name)) continue;
+  for (const migration of pending) {
     db.transaction(() => {
       db.exec(migration.up);
       record.run(migration.name, new Date().toISOString());
     })();
   }
+}
+
+const BACKUP_PREFIX = 'kubeclaude-';
+const BACKUP_SUFFIX = '.db';
+
+/**
+ * Copy the database before changing its shape.
+ *
+ * A migration runs at startup, inside a transaction, so a statement that fails
+ * rolls back. What does not roll back is a migration that succeeds and leaves
+ * the app unable to start — and that is the one failure it cannot dig itself out
+ * of, because the thing that would repair it is the thing that is down. A copy
+ * on disk turns that into a file swap.
+ *
+ * `VACUUM INTO` is used rather than a file copy: it takes a read lock and writes
+ * a consistent database, WAL included, which `cp` on a live SQLite file does
+ * not.
+ */
+function backupDatabase(nextMigration: string): void {
+  try {
+    fs.mkdirSync(config.backupsDir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const file = path.join(config.backupsDir, `${BACKUP_PREFIX}${stamp}-before-${nextMigration}${BACKUP_SUFFIX}`);
+    db.prepare('VACUUM INTO ?').run(file);
+    pruneBackups();
+    logger.info({ file, migration: nextMigration }, 'database backed up before migrating');
+  } catch (error) {
+    // Not fatal on its own: refusing to start because the backup failed would
+    // turn "the disk is full" into an outage of its own. Loud, though — this is
+    // the safety net going missing.
+    logger.error({ err: String(error), dir: config.backupsDir }, 'could not back up the database before migrating');
+  }
+}
+
+function pruneBackups(): void {
+  const files = fs
+    .readdirSync(config.backupsDir)
+    .filter((name) => name.startsWith(BACKUP_PREFIX) && name.endsWith(BACKUP_SUFFIX))
+    .sort();
+  for (const name of files.slice(0, Math.max(0, files.length - config.backupsKept))) {
+    fs.rmSync(path.join(config.backupsDir, name), { force: true });
+  }
+}
+
+/** Backups on disk, newest first. Timestamped names sort chronologically. */
+export function listBackups(): Array<{ file: string; bytes: number; takenAt: string }> {
+  if (!fs.existsSync(config.backupsDir)) return [];
+  return fs
+    .readdirSync(config.backupsDir)
+    .filter((name) => name.startsWith(BACKUP_PREFIX) && name.endsWith(BACKUP_SUFFIX))
+    .sort()
+    .reverse()
+    .map((name) => {
+      const file = path.join(config.backupsDir, name);
+      return { file, bytes: fs.statSync(file).size, takenAt: fs.statSync(file).mtime.toISOString() };
+    });
 }
 
 export function boolFromDb(value: unknown): boolean {

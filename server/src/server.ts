@@ -7,6 +7,7 @@ import { config } from './config.js';
 import { logger } from './logger.js';
 import { authRoutes } from './routes/auth.js';
 import { chatRoutes } from './routes/chats.js';
+import { errorRoutes } from './routes/errors.js';
 import { goalRoutes } from './routes/goals.js';
 import { mcpRoutes } from './routes/mcp.js';
 import { promptRoutes } from './routes/prompts.js';
@@ -14,6 +15,7 @@ import { runRoutes } from './routes/runs.js';
 import { streamRoutes } from './routes/stream.js';
 import { systemRoutes } from './routes/system.js';
 import { triggerRoutes } from './routes/triggers.js';
+import { recordError } from './store/errors.js';
 
 /**
  * The HTTP server, assembled but not listening.
@@ -54,6 +56,16 @@ export async function buildServer(): Promise<FastifyInstance> {
   app.setErrorHandler((error: FastifyError, request, reply) => {
     logger.error({ err: error.message, url: request.url, stack: error.stack }, 'request failed');
     const status = error.statusCode && error.statusCode >= 400 ? error.statusCode : 500;
+    // Only what nobody asked for: a 4xx is the API refusing a bad request, which
+    // is it working. A 500 is a bug, and belongs in the feed.
+    if (status >= 500) {
+      recordError({
+        source: 'server',
+        message: error.message,
+        detail: error.stack ?? null,
+        context: `${request.method} ${request.url}`,
+      });
+    }
     reply.code(status).send({ error: status === 500 ? 'Internal server error' : error.message });
   });
 
@@ -64,6 +76,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(runRoutes);
   await app.register(mcpRoutes);
   await app.register(chatRoutes);
+  await app.register(errorRoutes);
   await app.register(goalRoutes);
   await app.register(streamRoutes);
 

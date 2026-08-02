@@ -390,6 +390,8 @@ export interface Status {
   activeRuns: number;
   queuedRuns: number;
   awaitingResume: number;
+  /** Distinct faults in the error feed, so the sidebar can flag them. */
+  errorCount: number;
   quota: QuotaState;
   settings: Settings;
 }
@@ -443,4 +445,26 @@ export interface ModelOption {
   label: string;
   description: string;
   kind: 'alias' | 'model';
+}
+
+/** Where a recorded error came from. */
+export type ErrorSource = 'server' | 'browser' | 'run';
+
+/** One distinct fault, with how often it has happened since it first did. */
+export interface AppError {
+  id: string;
+  source: ErrorSource;
+  message: string;
+  detail: string | null;
+  context: string | null;
+  count: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+}
+
+/** A copy of the database taken before a migration. */
+export interface DbBackup {
+  file: string;
+  bytes: number;
+  takenAt: string;
 }

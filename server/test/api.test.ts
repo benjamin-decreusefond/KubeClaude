@@ -494,6 +494,55 @@ test('status reports the build, the quota and what the runs can reach', async ()
 });
 
 // --------------------------------------------------------------------------
+// The error feed
+// --------------------------------------------------------------------------
+
+test('a browser fault is recorded, counted rather than repeated, and cannot lie about where it came from', async () => {
+  const report = {
+    message: 'Cannot read properties of undefined (reading map)',
+    detail: 'TypeError: ...\n    at Runs (/assets/index.js:1:1)',
+    context: '/runs',
+    // Not part of the schema; a client must not be able to file a fault as the
+    // server's, because that is the one place you look when something is wrong.
+    source: 'server',
+  };
+
+  const first = await kube.request({ method: 'POST', url: '/api/errors', payload: report });
+  assert.equal(first.status, 201);
+  assert.equal(first.json<{ source: string; count: number }>().source, 'browser');
+
+  const second = await kube.request({ method: 'POST', url: '/api/errors', payload: report });
+  assert.equal(second.json<{ count: number }>().count, 2);
+
+  const listed = await kube.request({ method: 'GET', url: '/api/errors' });
+  const body = listed.json<{ items: Array<{ id: string; message: string; count: number }>; total: number }>();
+  assert.equal(body.total, 1, 'the same fault twice is one entry');
+  assert.equal(body.items[0]?.count, 2);
+
+  // And the sidebar can see it without asking a second endpoint.
+  const status = await kube.request({ method: 'GET', url: '/api/status' });
+  assert.equal(status.json<{ errorCount: number }>().errorCount, 1);
+
+  const id = body.items[0].id;
+  assert.equal((await kube.request({ method: 'DELETE', url: `/api/errors/${id}` })).status, 204);
+  assert.equal((await kube.request({ method: 'DELETE', url: `/api/errors/${id}` })).status, 404);
+  assert.equal((await kube.request({ method: 'GET', url: '/api/errors' })).json<{ total: number }>().total, 0);
+});
+
+test('an error report without a message is refused', async () => {
+  const response = await kube.request({ method: 'POST', url: '/api/errors', payload: { message: '' } });
+  assert.equal(response.status, 400);
+});
+
+test('the backups endpoint lists what is on disk', async () => {
+  const response = await kube.request({ method: 'GET', url: '/api/backups' });
+  assert.equal(response.status, 200);
+  // A fresh instance has never migrated over an existing database, so there is
+  // nothing to show — the shape is what matters here.
+  assert.ok(Array.isArray(response.json<{ items: unknown[] }>().items));
+});
+
+// --------------------------------------------------------------------------
 // Auth administration
 // --------------------------------------------------------------------------
 

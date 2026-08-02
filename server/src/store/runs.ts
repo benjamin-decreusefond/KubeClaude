@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { boolFromDb, boolToDb, db, jsonFromDb } from '../db.js';
 import { config } from '../config.js';
+import { clampPayload } from './payload.js';
 import type { ModelUsage, Run, RunEvent, RunStatus } from '../types.js';
 
 interface RunRow {
@@ -277,6 +278,9 @@ export function failOrphanedRuns(): number {
  * goal takes its runs with it, and the Claude process behind one of them can
  * still be mid-sentence. This is called from a stream handler, so throwing here
  * would take down the whole server rather than the one run that went away.
+ *
+ * The payload stored — and returned, and streamed — is the clamped one, so what
+ * a live watcher sees is what a reload will show.
  */
 export function appendEvent(runId: string, kind: RunEvent['kind'], payload: unknown): RunEvent | null {
   const row = db
@@ -284,13 +288,14 @@ export function appendEvent(runId: string, kind: RunEvent['kind'], payload: unkn
     .get(runId);
   const seq = row?.next ?? 1;
   const ts = new Date().toISOString();
+  const clamped = clampPayload(payload);
   try {
     db.prepare('INSERT INTO run_events (run_id, seq, ts, kind, payload) VALUES (?, ?, ?, ?, ?)').run(
       runId,
       seq,
       ts,
       kind,
-      JSON.stringify(payload ?? null),
+      JSON.stringify(clamped.payload),
     );
   } catch (error) {
     // A foreign key failure means the run was deleted; anything else is a real
@@ -302,7 +307,7 @@ export function appendEvent(runId: string, kind: RunEvent['kind'], payload: unkn
   // it is still a write, and a chatty run produces thousands of lines. The batch
   // is what makes the cap approximate — see TRIM_EVERY.
   if (seq % TRIM_EVERY === 0) trimEvents(runId);
-  return { runId, seq, ts, kind, payload };
+  return { runId, seq, ts, kind, payload: clamped.payload };
 }
 
 /**

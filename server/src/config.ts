@@ -38,8 +38,21 @@ export const config = {
    * so a run holds up to a hundred more than this between trims.
    */
   maxEventsPerRun: int('MAX_EVENTS_PER_RUN', 5_000),
+  /**
+   * Ceiling on one stored event. A single tool result can be megabytes of file
+   * content; kept whole it goes into SQLite, back out of `/api/runs/:id/events`
+   * and into the browser. Over this, the long strings inside the payload are cut
+   * and marked, so the shape of the message survives and the bulk does not.
+   */
+  maxEventBytes: int('MAX_EVENT_BYTES', 64 * 1024),
   /** Runs older than this are pruned on startup and daily. 0 disables pruning. */
   runRetentionDays: int('RUN_RETENTION_DAYS', 30),
+  /** Copies of the database taken before a migration runs. */
+  backupsDir: process.env.BACKUPS_DIR ?? path.join(dataDir, 'backups'),
+  /** How many of those copies to keep; the oldest are deleted beyond this. */
+  backupsKept: int('DB_BACKUPS_KEPT', 5),
+  /** Distinct errors kept in the feed; the least recently seen are dropped. */
+  maxStoredErrors: int('MAX_STORED_ERRORS', 200),
 
   /**
    * Optional static token, accepted as a bearer token or `X-Api-Key`. It exists
