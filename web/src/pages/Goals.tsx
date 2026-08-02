@@ -50,6 +50,8 @@ export function Goals() {
   const [objectives, setObjectives] = useState('');
   const [model, setModel] = useState('');
   const [workingDir, setWorkingDir] = useState('');
+  const [repoUrl, setRepoUrl] = useState('');
+  const [repoRef, setRepoRef] = useState('');
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('bypassPermissions');
   const [mcpServerIds, setMcpServerIds] = useState<string[]>([]);
   const [cadenceMinutes, setCadenceMinutes] = useState(30);
@@ -81,6 +83,8 @@ export function Goals() {
         startNow,
         model: model || null,
         workingDir: workingDir || null,
+        repoUrl: repoUrl || null,
+        repoRef: repoRef || null,
         permissionMode,
         mcpServerIds,
       });
@@ -178,6 +182,27 @@ export function Goals() {
                 min={0}
                 value={maxIterations}
                 onChange={(event) => setMaxIterations(Number(event.target.value))}
+              />
+            </Field>
+
+            <Field
+              label="Repository"
+              hint="Checked out and put back on its branch before every iteration."
+            >
+              <input
+                type="text"
+                value={repoUrl}
+                onChange={(event) => setRepoUrl(event.target.value)}
+                placeholder="https://github.com/owner/repo.git"
+              />
+            </Field>
+
+            <Field label="Branch" hint="Empty means the remote's default.">
+              <input
+                type="text"
+                value={repoRef}
+                onChange={(event) => setRepoRef(event.target.value)}
+                placeholder="main"
               />
             </Field>
 

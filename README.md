@@ -31,6 +31,12 @@ before sending. Arrow keys to move, Enter or Tab to take one, Escape to dismiss.
 **Prompts.** A standing task: prompt text, model, permission mode, tool allow/deny
 lists, env, MCP connections, a working directory, a `CLAUDE.md`, a timeout.
 
+**A repository to work in.** A prompt, a chat or a goal can name one. KubeClaude clones
+it into the working directory before the first run, and before every run after that
+fetches and resets it onto the requested branch — so a run starts on a clean checkout of
+the right commit rather than on whatever the last one left behind. See
+[Working in a repository](#working-in-a-repository).
+
 **Authentication.** It asks you to set a password the first time you open it, and after
 that you choose how to sign in: a login page, HTTP basic, a trusted reverse proxy, or
 nothing at all — plus the "skip it on the local network" switch Sonarr and Radarr have.
@@ -121,6 +127,8 @@ Everything is environment variables; the rest is configured in the UI.
 | `AUTH_METHOD` | — | Pin the login method to `none`, `forms`, `basic` or `external`. Set it and the UI shows the choice as locked, so an instance deliberately placed behind an SSO proxy cannot have that turned off from inside the app. |
 | `FORWARD_ENV_PREFIXES` | — | Comma-separated prefixes of pod env vars to forward into runs, e.g. `GITHUB_,GIT_`. Nothing is forwarded by default. |
 | `EXPOSE_KUBERNETES` | `true` | Forward `KUBERNETES_SERVICE_HOST`/`PORT` so `kubectl` can reach the API server as the pod's ServiceAccount. Set `false` to deny cluster access outright. |
+| `GITHUB_TOKEN` | — | Forwarded into runs (as both `GITHUB_TOKEN` and `GH_TOKEN`) so `git` push over HTTPS and `gh` are authenticated. |
+| `EXPOSE_GITHUB_TOKEN` | `true` | Set `false` to keep the token for KubeClaude and withhold it from runs. |
 | `CLAUDE_BIN` | `claude` | Path to the CLI. |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error`. |
 
@@ -245,6 +253,37 @@ the manifest is therefore unchanged.
 Set `EXPOSE_KUBERNETES=false` to withhold cluster access entirely: `kubectl` builds its
 in-cluster config from `KUBERNETES_SERVICE_HOST`/`PORT`, so not forwarding those is what
 actually turns it off.
+
+---
+
+## Working in a repository
+
+Give a prompt, a chat or a goal a repository URL and a branch, and the checkout stops
+being the prompt's problem.
+
+**Before every run**, KubeClaude clones it into the working directory if it is not there,
+then fetches and `reset --hard`s onto the branch. That is deliberate rather than a pull:
+the workspace is a scratch copy of the remote, and a run that was killed mid-rebase or
+left a conflicted merge must not poison the next one. Anything worth keeping was pushed.
+A tag or a commit SHA is checked out as given. If the clone or the checkout fails, the
+run **fails** — running against an empty or stale directory would look like success and
+be worse than stopping.
+
+**Committing and pushing need no setup in the prompt.** Every run gets a gitconfig with
+a committer identity (Settings → Git), `init.defaultBranch=main`, `safe.directory`, and a
+credential helper for github.com. The helper is a shell function that reads
+`GITHUB_TOKEN` from the environment when git asks — nothing secret is written to disk,
+and rotating the token needs no change here. `gh` sees the same token, so
+`gh pr create` works in the same run that pushed the branch.
+
+So a prompt can be about the change rather than about the plumbing:
+
+> On `main`, run the test suite. If anything fails, fix it on a branch, push, and open a
+> pull request describing what was wrong.
+
+The remote has to be an `https://` or `git@host:owner/repo` URL. A local path is refused:
+that string goes to `git clone`, and a prompt naming a path on the data volume is either
+a mistake or an attempt to read something else on it.
 
 ---
 
@@ -392,6 +431,7 @@ files are listed at the bottom of the Errors page.
 | `GET /api/status`, `/api/usage`, `/api/capabilities`, `/api/models` | Health, quota, what the runs can reach |
 | `GET POST /api/prompts`, `PATCH DELETE /api/prompts/:id` | Prompts |
 | `POST /api/prompts/:id/run` | Queue a run now |
+| `GET /api/capabilities` | Includes the git identity and whether a GitHub token is forwarded — never the token |
 | `GET /api/prompts/:id/files` | Paths under a prompt's working directory, for the composer's `@` completion |
 | `GET POST /api/prompts/:id/triggers`, `PATCH DELETE /api/triggers/:id` | Triggers |
 | `GET POST /api/chats`, `GET PATCH DELETE /api/chats/:id` | Conversations |

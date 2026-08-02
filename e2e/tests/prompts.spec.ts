@@ -20,6 +20,38 @@ test('a prompt can be created from the editor', async ({ page, consoleErrors }) 
   expectNoPageErrors(consoleErrors);
 });
 
+test('a repository can be attached to a prompt, and a bad remote is refused', async ({
+  page,
+  consoleErrors,
+}) => {
+  await page.goto('/prompts');
+  await page.getByRole('heading', { name: NAME }).click();
+  // The repository lives with the rest of what a run can reach.
+  await page.getByRole('button', { name: 'Access', exact: true }).click();
+
+  await page.getByLabel('Repository', { exact: true }).fill('https://github.com/owner/repo.git');
+  await page.getByLabel('Branch, tag or commit').fill('main');
+  await page.getByRole('button', { name: 'Save' }).click();
+
+  // A reload starts on the first tab again, so ask for the one it lives on.
+  await page.reload();
+  await page.getByRole('button', { name: 'Access', exact: true }).click();
+  await expect(page.getByLabel('Repository', { exact: true })).toHaveValue('https://github.com/owner/repo.git');
+  await expect(page.getByLabel('Branch, tag or commit')).toHaveValue('main');
+
+  // A path on the data volume is not a remote, and the API says so rather than
+  // handing it to `git clone`.
+  await page.getByLabel('Repository', { exact: true }).fill('/data/kubeclaude.db');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByText(/https:\/\/ or git@host/)).toBeVisible();
+
+  // Put it back so the rest of the suite sees the prompt it expects.
+  await page.getByLabel('Repository', { exact: true }).fill('');
+  await page.getByLabel('Branch, tag or commit').fill('');
+  await page.getByRole('button', { name: 'Save' }).click();
+  expectNoPageErrors(consoleErrors);
+});
+
 test('an edit is saved and shown on the list', async ({ page, consoleErrors }) => {
   await page.goto('/prompts');
   await page.getByRole('heading', { name: NAME }).click();

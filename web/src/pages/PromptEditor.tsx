@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { api } from '../api';
+import { api, describeError } from '../api';
 import { KeyValueEditor, ListEditor } from '../components/KeyValueEditor';
 import { Badge, Banner, Card, Checkbox, Field, StatusBadge } from '../components/primitives';
 import { formatRelative, formatTokens, triggerLabel } from '../format';
@@ -22,6 +22,8 @@ const EMPTY_DRAFT: Draft = {
   enabled: true,
   model: null,
   workingDir: null,
+  repoUrl: null,
+  repoRef: null,
   permissionMode: 'default',
   allowedTools: [],
   disallowedTools: [],
@@ -120,7 +122,7 @@ export function PromptEditor() {
         setMessage('Saved');
       }
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(describeError(cause));
     } finally {
       setSaving(false);
     }
@@ -403,8 +405,30 @@ export function PromptEditor() {
 
           <Card title="Workspace">
             <Field
+              label="Repository"
+              hint="Cloned into the working directory before the first run, then fetched and reset onto the branch before every run after that. Leave empty to manage the checkout from the prompt yourself."
+            >
+              <input
+                type="text"
+                value={draft.repoUrl ?? ''}
+                onChange={(event) => patch({ repoUrl: event.target.value || null })}
+                placeholder="https://github.com/owner/repo.git"
+              />
+            </Field>
+            <Field
+              label="Branch, tag or commit"
+              hint="Empty means the remote's default branch. A branch is reset onto its remote each run; anything the run wants to keep has to be pushed."
+            >
+              <input
+                type="text"
+                value={draft.repoRef ?? ''}
+                onChange={(event) => patch({ repoRef: event.target.value || null })}
+                placeholder="main"
+              />
+            </Field>
+            <Field
               label="Working directory"
-              hint="Where the run starts. Leave empty for a managed per-prompt directory on the data volume — clone repos into it from the prompt itself."
+              hint="Where the run starts, and where the repository above is checked out. Leave empty for a managed per-prompt directory on the data volume."
             >
               <input
                 type="text"

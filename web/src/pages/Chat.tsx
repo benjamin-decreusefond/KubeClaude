@@ -35,6 +35,27 @@ export function Chat() {
 
   const runIds = new Set((chat?.runs ?? []).map((run) => run.id));
 
+  /**
+   * Fetch a turn's output from the server rather than trusting the stream.
+   *
+   * The live stream is how the transcript fills in while Claude is talking, but
+   * it is not a guarantee: a short turn can be over before the browser has
+   * subscribed, and an SSE connection that dropped and came back has a gap in
+   * it. Either way the run row arrives — with its cost and turn count — and the
+   * words do not, which is a conversation that looks like it was never answered.
+   * So a finished turn is reconciled against the API once.
+   */
+  const backfill = useCallback(async (runId: string) => {
+    const { events } = await api.runEvents(runId);
+    setEventsByRun((current) => {
+      const next = new Map(current);
+      const held = next.get(runId) ?? [];
+      if (held.length >= events.length) return current;
+      next.set(runId, events);
+      return next;
+    });
+  }, []);
+
   useStream((event, payload) => {
     if (event === 'run:event') {
       const runEvent = payload as RunEvent;
@@ -61,6 +82,9 @@ export function Chat() {
             }
           : current,
       );
+
+      const finished = run.status !== 'queued' && run.status !== 'running';
+      if (finished) void backfill(run.id).catch(() => undefined);
     }
   });
 

@@ -55,6 +55,24 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * What went wrong, in a sentence a person can act on.
+ *
+ * A validation failure comes back as a generic message plus the field that was
+ * refused and why — "Invalid prompt" on its own tells you nothing, and the
+ * reason is right there in the response.
+ */
+export function describeError(error: unknown): string {
+  if (!(error instanceof ApiError)) return error instanceof Error ? error.message : String(error);
+
+  const details = error.details as { fieldErrors?: Record<string, string[]> } | undefined;
+  const reasons = Object.entries(details?.fieldErrors ?? {})
+    .flatMap(([field, messages]) => messages.map((message) => `${field}: ${message}`))
+    .slice(0, 4);
+
+  return reasons.length > 0 ? `${error.message} — ${reasons.join('; ')}` : error.message;
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   if (init.body) headers.set('Content-Type', 'application/json');

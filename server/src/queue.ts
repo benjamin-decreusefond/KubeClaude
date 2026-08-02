@@ -165,6 +165,7 @@ async function execute(run: Run): Promise<void> {
       promptText: run.promptText,
       resumeSessionId: run.sessionId,
       globalEnv: settings.globalEnv,
+      gitIdentity: { name: settings.gitUserName, email: settings.gitUserEmail },
       defaultModel: settings.defaultModel,
       environmentBriefing: settings.environmentBriefing,
       defaultMaxTurns: settings.defaultMaxTurns,

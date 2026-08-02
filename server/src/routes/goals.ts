@@ -42,6 +42,8 @@ function goalView(goal: Goal, prompt: Prompt | null) {
 const PROMPT_FIELDS = [
   'model',
   'workingDir',
+  'repoUrl',
+  'repoRef',
   'permissionMode',
   'allowedTools',
   'disallowedTools',
@@ -83,6 +85,8 @@ export async function goalRoutes(app: FastifyInstance): Promise<void> {
       enabled: true,
       model: input.model,
       workingDir: input.workingDir,
+      repoUrl: input.repoUrl,
+      repoRef: input.repoRef,
       permissionMode: input.permissionMode,
       allowedTools: input.allowedTools,
       disallowedTools: input.disallowedTools,

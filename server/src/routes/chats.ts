@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { cancelRun, cancelRunsForPrompt, enqueueRun } from '../queue.js';
 import * as promptStore from '../store/prompts.js';
 import * as runStore from '../store/runs.js';
-import { permissionModeSchema } from './schemas.js';
+import { permissionModeSchema, repoRefSchema, repoUrlSchema } from './schemas.js';
 import type { Prompt, Run } from '../types.js';
 
 const idParams = z.object({ id: z.string().min(1) });
@@ -20,6 +20,8 @@ const startSchema = z.object({
   model: z.string().max(120).nullable().default(null),
   permissionMode: permissionModeSchema.default('bypassPermissions'),
   workingDir: z.string().max(1024).nullable().default(null),
+  repoUrl: repoUrlSchema.default(null),
+  repoRef: repoRefSchema.default(null),
   allowedTools: z.array(z.string()).default([]),
   disallowedTools: z.array(z.string()).default([]),
   mcpServerIds: z.array(z.string()).default([]),
@@ -93,6 +95,8 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
       enabled: true,
       model: input.model ?? source?.model ?? null,
       workingDir: input.workingDir ?? source?.workingDir ?? null,
+      repoUrl: input.repoUrl ?? source?.repoUrl ?? null,
+      repoRef: input.repoRef ?? source?.repoRef ?? null,
       permissionMode: input.permissionMode,
       allowedTools: input.allowedTools.length > 0 ? input.allowedTools : (source?.allowedTools ?? []),
       disallowedTools:

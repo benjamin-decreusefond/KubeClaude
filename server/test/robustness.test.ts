@@ -66,6 +66,8 @@ function makePrompt(overrides: Partial<Prompt> = {}): Prompt {
     completionCheck: 'never',
     completionMarker: null,
     judgeModel: null,
+    repoUrl: null,
+    repoRef: null,
     ...overrides,
   });
 }
@@ -299,6 +301,60 @@ test('pruning runs leaves the progress log readable rather than pointing at noth
   assert.equal(entry?.summary, 'Did something once');
   // The entry survives; the link to a run that no longer exists does not.
   assert.equal(entry?.runId, null);
+});
+
+test('a run whose prompt names a repository starts inside the checkout', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const gitEnv = {
+    ...process.env,
+    HOME: tmpDir,
+    GIT_AUTHOR_NAME: 'Seed',
+    GIT_AUTHOR_EMAIL: 'seed@example.com',
+    GIT_COMMITTER_NAME: 'Seed',
+    GIT_COMMITTER_EMAIL: 'seed@example.com',
+  };
+  const remote = path.join(tmpDir, 'repo.git');
+  const seed = path.join(tmpDir, 'repo-seed');
+  fs.mkdirSync(seed, { recursive: true });
+  execFileSync('git', ['init', '--bare', '--initial-branch=main', remote], { env: gitEnv });
+  execFileSync('git', ['init', '--initial-branch=main'], { cwd: seed, env: gitEnv });
+  execFileSync('git', ['remote', 'add', 'origin', remote], { cwd: seed, env: gitEnv });
+  fs.writeFileSync(path.join(seed, 'PLEASE_FIX.md'), 'the bug is here\n');
+  execFileSync('git', ['add', '.'], { cwd: seed, env: gitEnv });
+  execFileSync('git', ['commit', '-m', 'seed'], { cwd: seed, env: gitEnv });
+  execFileSync('git', ['push', 'origin', 'HEAD'], { cwd: seed, env: gitEnv });
+
+  const prompt = makePrompt({ repoUrl: remote, repoRef: 'main' });
+  const run = enqueueRun({ promptId: prompt.id, triggerType: 'manual' })!;
+  await waitFor(() => {
+    const status = runStore.getRun(run.id)?.status;
+    return status !== 'queued' && status !== 'running';
+  });
+
+  // The working directory Claude was started in holds the repository, without
+  // the prompt having said a word about cloning.
+  const workspace = path.join(tmpDir, 'workspaces', prompt.id);
+  assert.ok(fs.existsSync(path.join(workspace, 'PLEASE_FIX.md')), 'the checkout should be there');
+  assert.ok(fs.existsSync(path.join(workspace, '.git')));
+
+  // And the run's log says where it came from, so a person reading it later
+  // knows which commit the work was done against.
+  const prepared = runStore
+    .listEvents(run.id)
+    .map((event) => event.payload as { kind?: string; ref?: string; head?: string })
+    .find((payload) => payload.kind === 'repository');
+  assert.equal(prepared?.ref, 'main');
+  assert.match(prepared?.head ?? '', /^[0-9a-f]{40}$/);
+});
+
+test('a repository that cannot be cloned fails the run instead of running anyway', async () => {
+  const prompt = makePrompt({ repoUrl: path.join(tmpDir, 'no-such-repo.git'), repoRef: null });
+  const run = enqueueRun({ promptId: prompt.id, triggerType: 'manual' })!;
+
+  await waitFor(() => runStore.getRun(run.id)?.status === 'failed');
+  // Doing the work against an empty directory would look like success and be
+  // worse than stopping.
+  assert.match(runStore.getRun(run.id)?.error ?? '', /clone failed/);
 });
 
 test('a chatty run does not grow its event log without bound', () => {

@@ -1,4 +1,5 @@
 import { DEFAULT_ENVIRONMENT_BRIEFING } from '../claude/briefing.js';
+import { DEFAULT_GIT_IDENTITY } from '../claude/git.js';
 import { db } from '../db.js';
 import type { Settings } from '../types.js';
 
@@ -16,6 +17,8 @@ export const DEFAULT_SETTINGS: Settings = {
   globalEnv: {},
   environmentBriefing: DEFAULT_ENVIRONMENT_BRIEFING,
   timezone: process.env.TZ ?? 'UTC',
+  gitUserName: DEFAULT_GIT_IDENTITY.name,
+  gitUserEmail: DEFAULT_GIT_IDENTITY.email,
   autoResumeEnabled: true,
   autoResumeDelayMinutes: 1,
 };

@@ -19,13 +19,16 @@ to a finished state on your own, or stop and say precisely what blocked you.
 # What you can do
 
 - **Git and GitHub.** \`git\` and \`gh\` are installed and authenticated through
-  GITHUB_TOKEN. You can clone, branch, commit, push, open pull requests, review
-  them, and merge them.
+  GITHUB_TOKEN, and a committer identity is already configured. You can clone,
+  branch, commit, push, open pull requests, review them, and merge them without
+  setting anything up first.
 - **The cluster.** \`kubectl\` is installed and authenticated as this pod's
   ServiceAccount. You can inspect anything except Secrets, register apps with
   ArgoCD, and force a rollout. You cannot read Secrets or touch RBAC objects.
 - **Your workspace.** You start in a working directory that persists between
-  runs. Clone what you need into it.
+  runs. If this task names a repository, it is already checked out there and put
+  back on the requested branch before you started — work in it, do not re-clone
+  it. Otherwise, clone what you need into it.
 
 # How changes reach the cluster
 

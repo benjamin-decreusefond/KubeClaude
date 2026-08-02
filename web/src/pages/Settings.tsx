@@ -122,6 +122,51 @@ export function SettingsPage() {
         </p>
       </Card>
 
+      <Card
+        title="Git"
+        subtitle="How a run reaches a repository, and what its commits are signed with"
+      >
+        <div className="grid-2">
+          <Field label="Committer name" hint="Author and committer on every commit a run makes.">
+            <input
+              type="text"
+              value={draft.gitUserName}
+              onChange={(event) => patch({ gitUserName: event.target.value })}
+              placeholder="KubeClaude"
+            />
+          </Field>
+          <Field label="Committer email" hint="Use an address your host will accept on a push.">
+            <input
+              type="email"
+              value={draft.gitUserEmail}
+              onChange={(event) => patch({ gitUserEmail: event.target.value })}
+              placeholder="kubeclaude@localhost"
+            />
+          </Field>
+        </div>
+
+        {capabilities?.git.githubToken ? (
+          <p className="secondary">
+            <code>GITHUB_TOKEN</code> is set and forwarded, so <code>git</code> pushes over HTTPS and{' '}
+            <code>gh</code> both authenticate without a prompt asking for anything.
+          </p>
+        ) : capabilities?.git.tokenWithheld ? (
+          <Banner tone="warning">
+            A GitHub token is set in the pod but <code>EXPOSE_GITHUB_TOKEN</code> is off, so runs cannot use
+            it. They can still clone public repositories; pushing will fail.
+          </Banner>
+        ) : (
+          <Banner tone="warning">
+            No <code>GITHUB_TOKEN</code> in the pod environment. Runs can clone public repositories over
+            HTTPS, but cannot push or use <code>gh</code>. Set it on the deployment and restart.
+          </Banner>
+        )}
+        <p className="stat-note">
+          The credential is never written to disk: the gitconfig KubeClaude writes reads the token from the
+          environment at the moment git asks for it, so rotating it needs no change here.
+        </p>
+      </Card>
+
       <Card title="Defaults">
         <Field label="Default model" hint="Used by any prompt that does not pin its own.">
           <select
