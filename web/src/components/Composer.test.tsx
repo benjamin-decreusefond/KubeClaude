@@ -20,6 +20,11 @@ function prompt(name: string, text: string): Prompt {
   return { id: name, name, prompt: text } as Prompt;
 }
 
+/** The box itself, typed — `getByRole` alone hands back a bare HTMLElement. */
+function box(): HTMLTextAreaElement {
+  return screen.getByRole<HTMLTextAreaElement>('textbox');
+}
+
 /** The composer as the chat uses it: it owns the draft, this holds it. */
 function Harness({ onSubmit = () => undefined }: { onSubmit?: () => void }) {
   const [value, setValue] = useState('');
@@ -52,7 +57,7 @@ test('@ offers files from the working directory and inserts the one you pick', a
   expect(mocked.promptFiles).toHaveBeenCalledWith('chat-1', 'db', expect.any(Number));
 
   await user.keyboard('{Enter}');
-  await waitFor(() => expect((screen.getByRole('textbox')).value).toBe('look at @server/src/db.ts '));
+  await waitFor(() => expect(box().value).toBe('look at @server/src/db.ts '));
 });
 
 test('Enter takes the highlighted suggestion rather than sending', async () => {
@@ -83,7 +88,7 @@ test('/ lists saved prompts and inserts the whole text', async () => {
   await user.keyboard('{Tab}');
 
   await waitFor(() =>
-    expect((screen.getByRole('textbox')).value).toBe('Check the cluster and report.'),
+    expect(box().value).toBe('Check the cluster and report.'),
   );
 });
 
@@ -97,7 +102,7 @@ test('Escape closes the menu and leaves what you typed alone', async () => {
 
   await user.keyboard('{Escape}');
   expect(screen.queryByRole('option')).toBeNull();
-  expect((screen.getByRole('textbox')).value).toBe('@db');
+  expect(box().value).toBe('@db');
 });
 
 test('Escape before the suggestions arrive keeps the menu shut', async () => {
