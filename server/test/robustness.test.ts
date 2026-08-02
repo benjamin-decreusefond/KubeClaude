@@ -357,6 +357,34 @@ test('a repository that cannot be cloned fails the run instead of running anyway
   assert.match(runStore.getRun(run.id)?.error ?? '', /clone failed/);
 });
 
+test('running out of turns says which ceiling was hit, not just "failed"', async () => {
+  process.env.FAKE_CLAUDE_MODE = 'maxturns';
+  const prompt = makePrompt({ maxTurns: 30 });
+  const run = enqueueRun({ promptId: prompt.id, triggerType: 'manual' })!;
+
+  try {
+    await waitFor(() => runStore.getRun(run.id)?.status === 'failed');
+  } finally {
+    delete process.env.FAKE_CLAUDE_MODE;
+  }
+
+  const finished = runStore.getRun(run.id)!;
+  // The distinction that matters: interrupted by a ceiling, not defeated by the
+  // task. Whoever reads this needs to know there is a knob, and which one.
+  assert.equal(finished.completionReason, 'turn-cap');
+  assert.equal(finished.completed, false);
+  assert.match(finished.error ?? '', /turn cap of 30/);
+  assert.match(finished.error ?? '', /resume/i);
+  // Not queued for automatic retry: the same cap would stop it in the same place.
+  assert.equal(finished.autoResumePending, false);
+
+  const marked = runStore
+    .listEvents(run.id)
+    .map((event) => event.payload as { kind?: string; cap?: number })
+    .find((payload) => payload.kind === 'turn-cap');
+  assert.equal(marked?.cap, 30);
+});
+
 test('a chatty run does not grow its event log without bound', () => {
   const prompt = makePrompt();
   const run = runStore.createRun({

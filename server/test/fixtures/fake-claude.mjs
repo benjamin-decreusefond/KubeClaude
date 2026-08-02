@@ -73,6 +73,21 @@ process.stdin.on('end', () => {
     process.exit(0);
   }
 
+  if (mode === 'maxturns') {
+    // What the CLI emits when it runs out of turns rather than out of work.
+    emit({
+      type: 'result',
+      subtype: 'error_max_turns',
+      is_error: true,
+      session_id: sessionId,
+      result: null,
+      num_turns: 31,
+      total_cost_usd: 0.4,
+      usage,
+    });
+    process.exit(0);
+  }
+
   if (mode === 'hang') {
     // Never emits a result; used to exercise the timeout path.
     setInterval(() => {}, 1000);

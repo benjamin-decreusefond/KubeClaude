@@ -579,8 +579,15 @@ in the cached prefix**, and that is where the money is. Four levers, most useful
 
 **Cap the turns.** Every turn re-sends the whole conversation, so spend grows
 superlinearly with turn count and a run that goes in circles can eat a window by itself.
-`defaultMaxTurns` (30 out of the box) applies to any prompt that does not pin its own.
+`defaultMaxTurns` (120 out of the box) applies to any prompt that does not pin its own.
 A prompt setting `0` opts out deliberately; leaving it empty inherits the default.
+
+The default is deliberately not tight. A run that hits the cap stops mid-task with its
+working tree half-edited, which costs the whole run and produces nothing — thirty turns
+is enough to look something up and report, and nowhere near enough to change code and
+open a pull request. The per-run token ceiling below is the budget guard; the turn cap
+is there to stop a genuinely stuck loop. When a run does hit it, the run says so and can
+be resumed: the session is still there and picks up where it stopped.
 
 **Set a per-run ceiling.** `runTokenCap` kills a run on the turn it crosses the limit,
 weighed by the same `budgetBasis` as the gauges so the number means one thing everywhere.

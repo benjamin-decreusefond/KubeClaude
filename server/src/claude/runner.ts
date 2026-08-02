@@ -41,6 +41,8 @@ export interface RunnerResult {
   sessionId: string | null;
   resultText: string | null;
   isError: boolean;
+  /** The CLI stopped because it ran out of turns rather than out of work. */
+  turnCapReached: boolean;
   subtype: string | null;
   numTurns: number | null;
   usage: UsageTotals;
@@ -471,6 +473,10 @@ export async function runClaude(options: RunnerOptions): Promise<RunnerResult> {
       sessionId,
       resultText,
       isError: isError || tokenCapExceeded || (code !== 0 && code !== null),
+      // `error_max_turns` is the CLI saying it was cut off, not that the task
+      // was impossible — a different thing to be told, and a different thing to
+      // do about it.
+      turnCapReached: subtype === 'error_max_turns',
       subtype,
       numTurns,
       usage: finalUsage,

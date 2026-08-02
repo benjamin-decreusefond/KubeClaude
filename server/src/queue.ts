@@ -233,6 +233,24 @@ async function execute(run: Run): Promise<void> {
         completionReason: 'token-cap',
         autoResumePending: false,
       });
+    } else if (result.turnCapReached) {
+      // Not a task that failed: a task that was interrupted by a ceiling. It is
+      // resumable — the session is still there and `Resume` picks it up where
+      // it stopped — so say which knob to turn rather than leaving a bare
+      // failure and a half-finished working tree to explain themselves.
+      const cap = prompt.maxTurns ?? settings.defaultMaxTurns;
+      runs.updateRun(run.id, {
+        ...common,
+        status: 'failed',
+        error:
+          `Stopped after ${result.numTurns ?? cap} turns, at the turn cap of ${cap}. ` +
+          'The work is unfinished, not impossible: resume this run to carry on, or raise ' +
+          'Max turns on the prompt (or the default in Settings).',
+        completed: false,
+        completionReason: 'turn-cap',
+        autoResumePending: false,
+      });
+      runs.appendEvent(run.id, 'system', { kind: 'turn-cap', cap, turns: result.numTurns });
     } else if (result.timedOut) {
       runs.updateRun(run.id, {
         ...common,
