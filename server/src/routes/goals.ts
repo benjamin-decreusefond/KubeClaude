@@ -41,7 +41,11 @@ function goalView(goal: Goal, prompt: Prompt | null) {
 
 const PROMPT_FIELDS = [
   'model',
+  'fallbackModel',
+  'effort',
+  'maxBudgetUsd',
   'workingDir',
+  'addDirs',
   'repoUrl',
   'repoRef',
   'permissionMode',
@@ -84,7 +88,11 @@ export async function goalRoutes(app: FastifyInstance): Promise<void> {
       prompt: PLACEHOLDER_PROMPT,
       enabled: true,
       model: input.model,
+      fallbackModel: input.fallbackModel,
+      effort: input.effort,
+      maxBudgetUsd: input.maxBudgetUsd,
       workingDir: input.workingDir,
+      addDirs: input.addDirs,
       repoUrl: input.repoUrl,
       repoRef: input.repoRef,
       permissionMode: input.permissionMode,

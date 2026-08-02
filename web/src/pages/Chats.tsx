@@ -120,7 +120,9 @@ export function Chats() {
                   ? 'Tools run without asking. You are watching in real time, which is the point of a chat — but it can change files, push commits and merge PRs.'
                   : permissionMode === 'default'
                     ? 'Anything needing approval is denied, since a headless run has nobody to ask. Good for read-only questions; a task that must write will stall.'
-                    : permissionMode === 'plan'
+                    : permissionMode === 'auto'
+                      ? 'The CLI judges each tool call: ordinary work runs, risky ones are refused.'
+                      : permissionMode === 'plan'
                       ? 'Research and propose only, no changes.'
                       : 'File edits auto-approved; other tools still need permission.'
               }
@@ -131,6 +133,7 @@ export function Chats() {
               >
                 <option value="bypassPermissions">bypassPermissions — let it act</option>
                 <option value="acceptEdits">acceptEdits — auto-approve file edits</option>
+                <option value="auto">auto — the CLI judges each call</option>
                 <option value="plan">plan — research only</option>
                 <option value="default">default — deny anything needing approval</option>
               </select>

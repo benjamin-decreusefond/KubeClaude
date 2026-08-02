@@ -10,7 +10,10 @@ export type RunStatus =
 
 export type TriggerType = 'cron' | 'interval' | 'session_reset' | 'weekly_reset' | 'quota_available';
 
-export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions';
+export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'auto' | 'bypassPermissions';
+
+/** `--effort`; null anywhere means "leave it to the CLI". */
+export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 export type CompletionCheck = 'marker' | 'judge' | 'always' | 'never';
 
@@ -157,7 +160,15 @@ export interface Prompt {
   prompt: string;
   enabled: boolean;
   model: string | null;
+  /** Models tried in order when the one above is overloaded (`--fallback-model`). */
+  fallbackModel: string | null;
+  /** Reasoning effort; null leaves the CLI's own default. */
+  effort: Effort | null;
+  /** Dollar ceiling for one run; null is off. */
+  maxBudgetUsd: number | null;
   workingDir: string | null;
+  /** Directories outside the working one the run may read and write. */
+  addDirs: string[];
   /** Repository cloned into the working directory before each run, if any. */
   repoUrl: string | null;
   /** Branch, tag or commit to check out; null means the remote's default. */
@@ -313,6 +324,8 @@ export interface Settings {
   quotaGuardEnabled: boolean;
   quotaReservePct: number;
   defaultModel: string | null;
+  defaultFallbackModel: string | null;
+  defaultEffort: Effort | null;
   globalEnv: Record<string, string>;
   environmentBriefing: string;
   timezone: string;

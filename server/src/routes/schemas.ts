@@ -20,7 +20,45 @@ const jsonText = (label: string) =>
     )
     .nullable();
 
-export const permissionModeSchema = z.enum(['default', 'acceptEdits', 'plan', 'bypassPermissions']);
+export const permissionModeSchema = z.enum([
+  'default',
+  'acceptEdits',
+  'plan',
+  // The CLI's own classifier decides per tool call: ordinary work proceeds, and
+  // what it flags needs an approval nobody is here to give, so it is denied.
+  'auto',
+  'bypassPermissions',
+]);
+
+export const effortSchema = z.enum(['low', 'medium', 'high', 'xhigh', 'max']);
+
+/**
+ * One model alias or id, or a comma-separated chain of them, for
+ * `--fallback-model`. Restricted to the characters a model name can contain, so
+ * it cannot arrive at the CLI as something other than a model.
+ */
+export const fallbackModelSchema = z
+  .string()
+  .max(300)
+  .regex(/^[A-Za-z0-9._-]+(,[A-Za-z0-9._-]+)*$/, 'One model, or several separated by commas')
+  .nullable();
+
+/**
+ * Extra directories a run may touch. Absolute only: a relative path would be
+ * resolved against a working directory that differs per prompt, and a leading
+ * dash would arrive at the CLI as a flag.
+ */
+export const addDirsSchema = z
+  .array(
+    z
+      .string()
+      .min(1)
+      .max(1024)
+      .refine((value) => value.startsWith('/') && !value.includes('\n'), {
+        message: 'Use an absolute path',
+      }),
+  )
+  .max(20);
 
 /**
  * A remote git can be reached at. Anything else — a local path, a `file://`,
@@ -51,7 +89,11 @@ export const promptCreateSchema = z.object({
   prompt: z.string().min(1),
   enabled: z.boolean().default(true),
   model: z.string().max(120).nullable().default(null),
+  fallbackModel: fallbackModelSchema.default(null),
+  effort: effortSchema.nullable().default(null),
+  maxBudgetUsd: z.number().min(0).max(10_000).nullable().default(null),
   workingDir: z.string().max(1024).nullable().default(null),
+  addDirs: addDirsSchema.default([]),
   repoUrl: repoUrlSchema.default(null),
   repoRef: repoRefSchema.default(null),
   permissionMode: permissionModeSchema.default('default'),
@@ -173,6 +215,8 @@ export const settingsUpdateSchema = z.object({
   quotaGuardEnabled: z.boolean().optional(),
   quotaReservePct: z.number().min(0).max(90).optional(),
   defaultModel: z.string().max(120).nullable().optional(),
+  defaultFallbackModel: fallbackModelSchema.optional(),
+  defaultEffort: effortSchema.nullable().optional(),
   globalEnv: envRecord.optional(),
   environmentBriefing: z.string().max(50_000).optional(),
   timezone: z.string().max(80).optional(),
@@ -195,7 +239,11 @@ export const settingsUpdateSchema = z.object({
  */
 const goalPromptSchema = z.object({
   model: z.string().max(120).nullable().default(null),
+  fallbackModel: fallbackModelSchema.default(null),
+  effort: effortSchema.nullable().default(null),
+  maxBudgetUsd: z.number().min(0).max(10_000).nullable().default(null),
   workingDir: z.string().max(1024).nullable().default(null),
+  addDirs: addDirsSchema.default([]),
   repoUrl: repoUrlSchema.default(null),
   repoRef: repoRefSchema.default(null),
   permissionMode: permissionModeSchema.default('bypassPermissions'),

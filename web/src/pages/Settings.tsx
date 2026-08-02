@@ -181,6 +181,35 @@ export function SettingsPage() {
           </select>
         </Field>
 
+        <Field
+          label="Fallback models"
+          hint="Tried in order when the model above is overloaded or unavailable, for every prompt that does not name its own chain. Comma-separated."
+        >
+          <input
+            type="text"
+            value={draft.defaultFallbackModel ?? ''}
+            onChange={(event) => patch({ defaultFallbackModel: event.target.value || null })}
+            placeholder="sonnet,haiku"
+          />
+        </Field>
+
+        <Field
+          label="Default effort"
+          hint="How hard the model works per turn, for prompts that do not pin their own. Left alone, the CLI decides."
+        >
+          <select
+            value={draft.defaultEffort ?? ''}
+            onChange={(event) => patch({ defaultEffort: (event.target.value || null) as Settings['defaultEffort'] })}
+          >
+            <option value="">CLI default</option>
+            <option value="low">low</option>
+            <option value="medium">medium</option>
+            <option value="high">high</option>
+            <option value="xhigh">xhigh</option>
+            <option value="max">max</option>
+          </select>
+        </Field>
+
         <Field label="Timezone" hint="Used for new cron triggers. An IANA name such as Europe/Paris.">
           <input type="text" value={draft.timezone} onChange={(event) => patch({ timezone: event.target.value })} />
         </Field>

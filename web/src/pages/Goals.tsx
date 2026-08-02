@@ -226,6 +226,7 @@ export function Goals() {
             >
               <option value="bypassPermissions">bypassPermissions — let it act</option>
               <option value="acceptEdits">acceptEdits — auto-approve file edits</option>
+              <option value="auto">auto — the CLI judges each call, refusing the risky ones</option>
               <option value="plan">plan — research only</option>
               <option value="default">default — deny anything needing approval</option>
             </select>
