@@ -14,7 +14,7 @@ import {
 } from '../config.js';
 import { activeRunCount } from '../queue.js';
 import { countErrors } from '../store/errors.js';
-import { countRuns } from '../store/runs.js';
+import { countQueuedByKind, countRuns } from '../store/runs.js';
 import { DEFAULT_SETTINGS, getSettings, updateSettings } from '../store/settings.js';
 import { getQuotaState, listWindows } from '../store/usage.js';
 import { getDashboard } from '../store/stats.js';
@@ -52,6 +52,9 @@ export async function systemRoutes(app: FastifyInstance): Promise<void> {
       maxConcurrentRuns: config.maxConcurrentRuns,
       activeRuns: activeRunCount(),
       queuedRuns: countRuns({ status: 'queued' }),
+      // Split out, because the sidebar puts a badge next to Prompts and a goal's
+      // queued iteration is not something the Prompts page can show you.
+      queuedByKind: countQueuedByKind(),
       awaitingResume: countRuns({ status: 'rate_limited' }),
       // So the sidebar can show that something went wrong without polling a
       // second endpoint for it.

@@ -25,6 +25,8 @@ export function App({ auth, onAuthChanged }: { auth: AuthState; onAuthChanged: (
   const [tokenDraft, setTokenDraft] = useState(getToken());
 
   const { data: status, error } = usePolled(() => api.status(), 15_000);
+  const queuedPrompts = status?.queuedByKind.scheduled ?? 0;
+  const queuedGoals = status?.queuedByKind.goal ?? 0;
   const unauthorized = error?.toLowerCase().includes('unauthorized') ?? false;
 
   const signOut = async () => {
@@ -52,12 +54,22 @@ export function App({ auth, onAuthChanged }: { auth: AuthState; onAuthChanged: (
           <NavLink to="/chats">Chat</NavLink>
           <NavLink to="/prompts">
             Prompts
-            {status && <span className="nav-count">{status.queuedRuns > 0 ? `${status.queuedRuns} queued` : ''}</span>}
+            {/* Only what this page can actually show: a goal's queued iteration
+                belongs to a hidden prompt, and counting it here reads as a list
+                that is not loading. */}
+            {queuedPrompts > 0 && <span className="nav-count">{queuedPrompts} queued</span>}
           </NavLink>
-          <NavLink to="/goals">Goals</NavLink>
+          <NavLink to="/goals">
+            Goals
+            {queuedGoals > 0 && <span className="nav-count">{queuedGoals} queued</span>}
+          </NavLink>
           <NavLink to="/runs">
             Runs
-            {status && status.activeRuns > 0 && <span className="nav-count">{status.activeRuns} live</span>}
+            {status && (status.activeRuns > 0 || status.queuedRuns > 0) && (
+              <span className="nav-count">
+                {status.activeRuns > 0 ? `${status.activeRuns} live` : `${status.queuedRuns} queued`}
+              </span>
+            )}
           </NavLink>
           <NavLink to="/mcp">MCP connections</NavLink>
           <NavLink to="/errors">

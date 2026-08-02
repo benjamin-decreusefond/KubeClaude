@@ -181,6 +181,25 @@ export function countRuns(options: Pick<ListRunsOptions, 'promptId' | 'status'> 
   return row?.count ?? 0;
 }
 
+/**
+ * Queued runs grouped by what kind of thing owns them.
+ *
+ * A goal and a chat each own a hidden prompt, so a plain count of queued runs
+ * includes work that never appears on the Prompts page. A badge reading
+ * "1 queued" above "No prompts yet" is that count leaking.
+ */
+export function countQueuedByKind(): Record<string, number> {
+  const rows = db
+    .prepare<[], { kind: string; count: number }>(
+      `SELECT prompts.kind AS kind, COUNT(*) AS count
+       FROM runs JOIN prompts ON prompts.id = runs.prompt_id
+       WHERE runs.status = 'queued'
+       GROUP BY prompts.kind`,
+    )
+    .all();
+  return Object.fromEntries(rows.map((row) => [row.kind, row.count]));
+}
+
 export function listQueuedRuns(): Run[] {
   return db
     .prepare<[], RunRow>("SELECT * FROM runs WHERE status = 'queued' ORDER BY queued_at")
