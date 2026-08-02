@@ -96,6 +96,59 @@ test('a prompt can be created, read back, listed and changed', async () => {
   await kube.request({ method: 'PATCH', url: `/api/prompts/${promptId}`, payload: { enabled: true } });
 });
 
+test('the CLI execution controls round-trip through the API', async () => {
+  const created = await kube.request({
+    method: 'POST',
+    url: '/api/prompts',
+    payload: {
+      name: 'execution-controls',
+      prompt: 'Do the thing',
+      fallbackModel: 'sonnet,haiku',
+      effort: 'xhigh',
+      maxBudgetUsd: 3,
+      addDirs: ['/data/other'],
+      permissionMode: 'auto',
+    },
+  });
+  assert.equal(created.status, 201);
+  const prompt = created.json<{
+    id: string;
+    fallbackModel: string;
+    effort: string;
+    maxBudgetUsd: number;
+    addDirs: string[];
+    permissionMode: string;
+  }>();
+  assert.equal(prompt.fallbackModel, 'sonnet,haiku');
+  assert.equal(prompt.effort, 'xhigh');
+  assert.equal(prompt.maxBudgetUsd, 3);
+  assert.deepEqual(prompt.addDirs, ['/data/other']);
+  assert.equal(prompt.permissionMode, 'auto');
+
+  const reread = await kube.request({ method: 'GET', url: `/api/prompts/${prompt.id}` });
+  assert.deepEqual(reread.json<{ addDirs: string[] }>().addDirs, ['/data/other']);
+
+  await kube.request({ method: 'DELETE', url: `/api/prompts/${prompt.id}` });
+});
+
+test('an execution control the CLI would not accept is refused', async () => {
+  for (const payload of [
+    { effort: 'extreme' },
+    // A relative path resolves against a working directory that differs per
+    // prompt, and a leading dash would arrive at the CLI as a flag.
+    { addDirs: ['relative/path'] },
+    { addDirs: ['--dangerously-skip-permissions'] },
+    { fallbackModel: 'sonnet;rm -rf /' },
+  ]) {
+    const response = await kube.request({
+      method: 'POST',
+      url: '/api/prompts',
+      payload: { name: `bad-${JSON.stringify(payload).length}`, prompt: 'x', ...payload },
+    });
+    assert.equal(response.status, 400, `should refuse ${JSON.stringify(payload)}`);
+  }
+});
+
 test('an invalid prompt is refused with the reason', async () => {
   const response = await kube.request({
     method: 'POST',

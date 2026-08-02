@@ -192,9 +192,11 @@ without any one of them:
 
 1. **A permission mode that allows it.** The default mode denies anything that would
    need approval — correct, since nobody is there to approve, but a task that must write
-   will get nowhere. Use `acceptEdits` for file work, or `bypassPermissions` when
-   unattended action is the whole point. Narrow it back down with the allow list:
-   `Bash(gh pr merge:*)`, `mcp__github__merge_pull_request`.
+   will get nowhere. Use `acceptEdits` for file work, `auto` to let the CLI's own
+   classifier judge each call (ordinary work runs, force pushes and production deploys
+   are refused), or `bypassPermissions` when unattended action is the whole point.
+   Narrow it back down with the allow list: `Bash(gh pr merge:*)`,
+   `mcp__github__merge_pull_request`.
 2. **Credentials, via env.** Put a `GITHUB_TOKEN` in the prompt's env (or the global env
    in Settings) and `gh` will use it. Reference secrets as `${VAR}` in MCP configs so
    they stay in Kubernetes.
@@ -570,6 +572,37 @@ the raw counters become spend:
 
 Run history keeps the raw counters either way; only the gauge and the quota guard read
 the basis.
+
+## Choosing how a run runs
+
+Four CLI controls sit next to the model, per prompt, with a global default behind each
+of the first two:
+
+**Fallback models.** `--fallback-model`, a comma-separated chain. When the chosen model
+is overloaded or unavailable the CLI moves down the list instead of failing, and retries
+the primary at the start of each turn. A scheduled run has nobody to retry it by hand,
+so `opus` with `sonnet,haiku` behind it is the difference between the work happening on
+a smaller model and not happening at all. Set it globally in Settings — capacity is a
+property of the account, not of one task — and override it on the prompts that care.
+
+**Effort.** `--effort`, one of `low`, `medium`, `high`, `xhigh`, `max`. How hard the
+model works per turn, and roughly what it costs. Left empty the CLI decides, which is
+not the same as choosing a level: a prompt that says nothing follows whatever the global
+default says, and a prompt that pins one always wins.
+
+**A cost ceiling.** `--max-budget-usd`, per run. The CLI stops itself once a run has
+spent that much and still reports what it did, which is gentler than the global
+`runTokenCap` — that one kills the process from outside. Use the dollar ceiling on a
+prompt whose cost you can name, and the token ceiling as the blunt instrument behind
+everything.
+
+**Additional directories.** `--add-dir`, absolute paths. The working directory is
+already writable; these are the extra ones. This is what lets a single prompt work
+across two checkouts — read the manifests in one repository, change the code in another
+— instead of needing a prompt per directory.
+
+None of the four is passed to the CLI unless something asked for it, so a prompt that
+leaves them alone invokes exactly the command it did before.
 
 ## Spending less
 

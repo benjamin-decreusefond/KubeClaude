@@ -21,7 +21,11 @@ const EMPTY_DRAFT: Draft = {
   prompt: '',
   enabled: true,
   model: null,
+  fallbackModel: null,
+  effort: null,
+  maxBudgetUsd: null,
   workingDir: null,
+  addDirs: [],
   repoUrl: null,
   repoRef: null,
   permissionMode: 'default',
@@ -42,6 +46,16 @@ const EMPTY_DRAFT: Draft = {
   completionCheck: 'marker',
   completionMarker: null,
   judgeModel: null,
+};
+
+const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+
+const EFFORT_HINTS: Record<string, string> = {
+  low: 'Least thinking per turn: cheapest and fastest, for mechanical work.',
+  medium: 'Balanced; a sensible middle for most scheduled tasks.',
+  high: 'More thinking per turn, at proportionally more tokens.',
+  xhigh: 'Harder still. Worth it for genuinely difficult reasoning, not for volume.',
+  max: 'Everything the model has. Expect the token bill to match.',
 };
 
 const TABS = ['Task', 'Access', 'Schedule', 'Resume', 'Advanced'] as const;
@@ -260,6 +274,45 @@ export function PromptEditor() {
                 Falls back to the global default, <code>{settings.defaultModel}</code>.
               </p>
             )}
+
+            <Field
+              label="Fallback models"
+              hint={
+                settings?.defaultFallbackModel && !draft.fallbackModel
+                  ? `Empty inherits the global chain, ${settings.defaultFallbackModel}.`
+                  : 'Tried in order when the model above is overloaded or unavailable. Nobody is there to retry a 3am run by hand, so this is what keeps it from failing outright. Comma-separated.'
+              }
+            >
+              <input
+                type="text"
+                value={draft.fallbackModel ?? ''}
+                onChange={(event) => patch({ fallbackModel: event.target.value || null })}
+                placeholder="sonnet,haiku"
+              />
+            </Field>
+
+            <Field
+              label="Effort"
+              hint={
+                draft.effort
+                  ? EFFORT_HINTS[draft.effort]
+                  : settings?.defaultEffort
+                    ? `Inherits the global default, ${settings.defaultEffort}.`
+                    : 'How hard the model works per turn. Left alone, the CLI decides.'
+              }
+            >
+              <select
+                value={draft.effort ?? ''}
+                onChange={(event) => patch({ effort: (event.target.value || null) as Draft['effort'] })}
+              >
+                <option value="">CLI default</option>
+                {EFFORT_LEVELS.map((level) => (
+                  <option key={level} value={level}>
+                    {level}
+                  </option>
+                ))}
+              </select>
+            </Field>
           </Card>
         </div>
       )}
@@ -279,7 +332,9 @@ export function PromptEditor() {
                     ? 'Tools that would need approval are denied, since nobody can approve them. Safe, but a task that has to write will stall.'
                     : draft.permissionMode === 'acceptEdits'
                       ? 'File edits are auto-approved; other tools still need permission.'
-                      : 'Plan mode: Claude researches and proposes, but changes nothing.'
+                      : draft.permissionMode === 'auto'
+                        ? 'The CLI classifies each tool call: ordinary work runs, and what it flags as risky — force pushes, production deploys, secret writes — needs an approval no unattended run can get, so it is refused. The middle ground between “stalls on everything” and “does anything”.'
+                        : 'Plan mode: Claude researches and proposes, but changes nothing.'
               }
             >
               <select
@@ -289,6 +344,7 @@ export function PromptEditor() {
                 <option value="default">default — deny anything needing approval</option>
                 <option value="plan">plan — research only, no changes</option>
                 <option value="acceptEdits">acceptEdits — auto-approve file edits</option>
+                <option value="auto">auto — the CLI judges each call, refusing the risky ones</option>
                 <option value="bypassPermissions">bypassPermissions — no prompts at all</option>
               </select>
             </Field>
@@ -633,6 +689,33 @@ export function PromptEditor() {
                 min={0}
                 value={draft.maxTurns ?? ''}
                 onChange={(event) => patch({ maxTurns: event.target.value ? Number(event.target.value) : null })}
+              />
+            </Field>
+            <Field
+              label="Cost ceiling (USD)"
+              hint="The CLI stops itself once a run has spent this much, and still reports what it did — unlike the global token ceiling, which kills the process. Empty means no ceiling."
+            >
+              <input
+                type="number"
+                min={0}
+                step={0.5}
+                value={draft.maxBudgetUsd ?? ''}
+                onChange={(event) =>
+                  patch({ maxBudgetUsd: event.target.value ? Number(event.target.value) : null })
+                }
+              />
+            </Field>
+          </Card>
+
+          <Card title="Workspace">
+            <Field
+              label="Additional directories"
+              hint="Absolute paths, one per line. The working directory is already allowed; these are the extra ones — a second checkout, a shared cache — the run may read and write."
+            >
+              <ListEditor
+                value={draft.addDirs}
+                onChange={(addDirs) => patch({ addDirs })}
+                placeholder={'/data/workspaces/other-repo'}
               />
             </Field>
           </Card>

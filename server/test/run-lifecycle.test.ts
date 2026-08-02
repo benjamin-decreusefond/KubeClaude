@@ -378,6 +378,54 @@ test('a CLAUDE.md KubeClaude wrote is replaced on the next run', async () => {
   assert.ok(!content.includes('first version'));
 });
 
+test('the execution controls a prompt sets reach the CLI', async () => {
+  const prompt = makePrompt({
+    model: 'claude-opus-5',
+    fallbackModel: 'sonnet,haiku',
+    effort: 'high',
+    maxBudgetUsd: 2.5,
+    addDirs: ['/tmp/one', '/tmp/two'],
+    permissionMode: 'auto',
+  });
+  await waitForTerminal(enqueueRun({ promptId: prompt.id, triggerType: 'manual' })!.id);
+
+  const { argv } = invocations()[0]!;
+  assert.equal(argv[argv.indexOf('--fallback-model') + 1], 'sonnet,haiku');
+  assert.equal(argv[argv.indexOf('--effort') + 1], 'high');
+  assert.equal(argv[argv.indexOf('--max-budget-usd') + 1], '2.5');
+  assert.equal(argv[argv.indexOf('--permission-mode') + 1], 'auto');
+  // --add-dir is variadic: the flag once, then every directory.
+  const dirs = argv.indexOf('--add-dir');
+  assert.deepEqual(argv.slice(dirs + 1, dirs + 3), ['/tmp/one', '/tmp/two']);
+});
+
+test('a prompt with no model preferences inherits the global ones', async () => {
+  updateSettings({ defaultFallbackModel: 'haiku', defaultEffort: 'low' });
+  try {
+    await waitForTerminal(enqueueRun({ promptId: makePrompt().id, triggerType: 'manual' })!.id);
+    const first = invocations()[0]!.argv;
+    assert.equal(first[first.indexOf('--fallback-model') + 1], 'haiku');
+    assert.equal(first[first.indexOf('--effort') + 1], 'low');
+
+    // What the prompt names for itself wins over the global default.
+    const pinned = makePrompt({ fallbackModel: 'sonnet', effort: 'max' });
+    await waitForTerminal(enqueueRun({ promptId: pinned.id, triggerType: 'manual' })!.id);
+    const second = invocations()[1]!.argv;
+    assert.equal(second[second.indexOf('--fallback-model') + 1], 'sonnet');
+    assert.equal(second[second.indexOf('--effort') + 1], 'max');
+  } finally {
+    updateSettings({ defaultFallbackModel: null, defaultEffort: null });
+  }
+});
+
+test('a prompt that sets none of them passes none of the flags', async () => {
+  await waitForTerminal(enqueueRun({ promptId: makePrompt().id, triggerType: 'manual' })!.id);
+  const { argv } = invocations()[0]!;
+  for (const flag of ['--fallback-model', '--effort', '--max-budget-usd', '--add-dir']) {
+    assert.ok(!argv.includes(flag), `${flag} must not be passed when nothing asked for it`);
+  }
+});
+
 test('a run that never returns is killed at its timeout', async () => {
   process.env.FAKE_CLAUDE_MODE = 'hang';
   const prompt = makePrompt({ timeoutSeconds: 30 }); // clamped to the 30s minimum
