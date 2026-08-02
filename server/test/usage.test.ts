@@ -8,7 +8,7 @@ const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kubeclaude-usage-'));
 process.env.DATA_DIR = tmpDir;
 
 const { migrate, db } = await import('../src/db.js');
-const { openWindows, addUsage, getQuotaState, budgetedTokens } = await import('../src/store/usage.js');
+const { openWindows, currentWindows, addUsage, getQuotaState, budgetedTokens } = await import('../src/store/usage.js');
 const { updateSettings } = await import('../src/store/settings.js');
 type UsageWindow = import('../src/types.js').UsageWindow;
 
@@ -91,4 +91,34 @@ test('the quota guard reads the configured basis', () => {
   updateSettings({ budgetBasis: 'input_output' });
   assert.equal(getQuotaState(at).canRun, true);
   updateSettings({ quotaGuardEnabled: false });
+});
+
+test('spend is booked against the window that is live when it is reported', () => {
+  const started = new Date('2026-07-27T04:50:00Z');
+  openWindows(started);
+
+  // The run outlives its window — possible with a long timeout, and routine for
+  // a session that has been resumed a few times.
+  const finished = new Date('2026-07-27T10:30:00Z');
+  const live = currentWindows(finished);
+  addUsage(live.session.id, {
+    inputTokens: 1000,
+    outputTokens: 500,
+    cacheCreationTokens: 0,
+    cacheReadTokens: 0,
+    totalTokens: 1500,
+    costUsd: 0.1,
+  });
+
+  // Booking it back to the window it started in would leave the tokens
+  // somewhere nothing consults again, and the guard would read the live window
+  // as emptier than it is.
+  const open = getQuotaState(finished);
+  assert.equal(open.session.window?.id, live.session.id);
+  assert.equal(open.session.used, 1500);
+
+  // Reading the windows without a run to count must not invent one.
+  const again = currentWindows(finished);
+  assert.equal(again.session.id, live.session.id);
+  assert.equal(again.session.runCount, 0);
 });

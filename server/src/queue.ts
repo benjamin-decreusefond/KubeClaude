@@ -7,7 +7,7 @@ import { assessCompletion, markerFor, markerInstruction } from './claude/complet
 import * as runs from './store/runs.js';
 import { getPrompt, updatePrompt } from './store/prompts.js';
 import { getSettings } from './store/settings.js';
-import { addUsage, getQuotaState, openWindows } from './store/usage.js';
+import { addUsage, currentWindows, getQuotaState, openWindows } from './store/usage.js';
 import type { Run, RunStatus } from './types.js';
 
 const inFlight = new Map<string, AbortController>();
@@ -153,7 +153,8 @@ async function execute(run: Run): Promise<void> {
   runs.updateRun(run.id, { status: 'running', startedAt: startedAt.toISOString() });
   emitUpdate(run.id);
 
-  const windows = openWindows(startedAt);
+  // Counts the run against the window it starts in.
+  openWindows(startedAt);
   const settings = getSettings();
 
   try {
@@ -180,6 +181,11 @@ async function execute(run: Run): Promise<void> {
     });
 
     if (result.usage.totalTokens > 0 || result.usage.costUsd > 0) {
+      // Against the window that is live now, not the one this run started in.
+      // A run can outlive a 5-hour window, and spend booked to a window that
+      // has already closed leaves the guard reading the live one as emptier
+      // than it is.
+      const windows = currentWindows(new Date());
       addUsage(windows.session.id, result.usage);
       addUsage(windows.weekly.id, result.usage);
       bus.emit('quota:changed');

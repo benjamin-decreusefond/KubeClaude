@@ -242,6 +242,19 @@ test('running a prompt queues a run and the run shows up in the listing', async 
   const detail = await kube.request({ method: 'GET', url: `/api/runs/${run.id}` });
   assert.equal(detail.status, 200);
 
+  // Resuming a run that has not stopped would put a second Claude on the same
+  // session and spend the quota twice on the same work. Follow-up refuses it
+  // for the same reason, and so must this. Keyed on the state as it is at this
+  // instant rather than on how fast the stub CLI happened to be.
+  const now = detail.json<{ status: string }>().status;
+  const resumed = await kube.request({ method: 'POST', url: `/api/runs/${run.id}/resume` });
+  if (now === 'queued' || now === 'running') {
+    assert.equal(resumed.status, 409, 'a run in flight must not be resumable');
+    assert.match(resumed.json<{ error: string }>().error, /has not finished/);
+    const after = await kube.request({ method: 'GET', url: `/api/runs?promptId=${promptId}` });
+    assert.equal(after.json<{ total: number }>().total, 1, 'nothing should have been queued behind it');
+  }
+
   // Cancelling is idempotent from the caller's point of view: either it stopped
   // something, or the run had already finished and there is nothing to stop.
   const cancelled = await kube.request({ method: 'POST', url: `/api/runs/${run.id}/cancel` });

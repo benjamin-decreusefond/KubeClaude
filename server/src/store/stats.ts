@@ -207,19 +207,27 @@ export function promptBreakdown(since: Date, limit = 8): PromptBreakdown[] {
       {
         prompt_id: string;
         prompt_name: string;
+        latest: string;
         runs: number;
         total_tokens: number | null;
         cost_usd: number | null;
         failed: number | null;
       }
     >(
-      `SELECT prompt_id, prompt_name,
+      /*
+       * Grouped by id alone. The name is copied onto every run, so grouping by
+       * both would split a prompt in two the day it is renamed — the same
+       * prompt, listed twice, each with half its spend. SQLite hands a bare
+       * column from the row that produced the MAX, so the name shown is the one
+       * from its most recent run.
+       */
+      `SELECT prompt_id, prompt_name, MAX(queued_at) AS latest,
               COUNT(*) AS runs,
               SUM(total_tokens) AS total_tokens,
               SUM(cost_usd) AS cost_usd,
               SUM(CASE WHEN status IN ('failed', 'timeout') THEN 1 ELSE 0 END) AS failed
        FROM runs WHERE queued_at >= ?
-       GROUP BY prompt_id, prompt_name
+       GROUP BY prompt_id
        ORDER BY total_tokens DESC NULLS LAST
        LIMIT ?`,
     )
