@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { ChatTranscript } from '../components/ChatTranscript';
+import { Composer } from '../components/Composer';
 import { Banner, Modal, Field } from '../components/primitives';
 import { useStream } from '../hooks';
 import type { ChatDetail, Run, RunEvent } from '../types';
@@ -17,7 +18,6 @@ export function Chat() {
   const [promoting, setPromoting] = useState(false);
   /** Held while a turn is in flight; sent as soon as it finishes. */
   const [queued, setQueued] = useState<string | null>(null);
-  const composerRef = useRef<HTMLTextAreaElement>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -108,13 +108,6 @@ export function Chat() {
     else void send(text);
   };
 
-  const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      submit();
-    }
-  };
-
   if (!chat) {
     return (
       <div>
@@ -164,24 +157,18 @@ export function Chat() {
             </button>
           </div>
         )}
-        <textarea
-          ref={composerRef}
+        <Composer
           value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={onKeyDown}
+          onChange={setDraft}
+          onSubmit={submit}
+          promptId={chat.id}
+          busy={chat.busy}
           placeholder={
             chat.busy
               ? 'Claude is working — type ahead and this will send when it finishes'
               : 'Reply to Claude…  (Enter to send, Shift+Enter for a new line)'
           }
-          rows={3}
         />
-        <div className="composer-actions">
-          <span className="stat-note">Enter sends · Shift+Enter for a new line</span>
-          <button className="primary" onClick={submit} disabled={!draft.trim()}>
-            {chat.busy ? 'Queue' : 'Send'}
-          </button>
-        </div>
       </div>
 
       {promoting && <PromoteModal chat={chat} onClose={() => setPromoting(false)} />}

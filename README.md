@@ -22,6 +22,12 @@ message resumes the same session, so it keeps its context and you can steer it a
 works — ask it to look at something, watch what it finds, tell it what to do next. When
 a conversation does what you want, save it as a prompt and put it on a schedule.
 
+The composer has two completions, both plain text insertions — nothing is a command
+and nothing is interpreted. `@` lists files in the conversation's working directory, so
+you can point at one without going to look up its path. `/`, at the start of a message,
+lists the prompts you have saved and drops the chosen one's text in for you to edit
+before sending. Arrow keys to move, Enter or Tab to take one, Escape to dismiss.
+
 **Prompts.** A standing task: prompt text, model, permission mode, tool allow/deny
 lists, env, MCP connections, a working directory, a `CLAUDE.md`, a timeout.
 
@@ -386,6 +392,7 @@ files are listed at the bottom of the Errors page.
 | `GET /api/status`, `/api/usage`, `/api/capabilities`, `/api/models` | Health, quota, what the runs can reach |
 | `GET POST /api/prompts`, `PATCH DELETE /api/prompts/:id` | Prompts |
 | `POST /api/prompts/:id/run` | Queue a run now |
+| `GET /api/prompts/:id/files` | Paths under a prompt's working directory, for the composer's `@` completion |
 | `GET POST /api/prompts/:id/triggers`, `PATCH DELETE /api/triggers/:id` | Triggers |
 | `GET POST /api/chats`, `GET PATCH DELETE /api/chats/:id` | Conversations |
 | `POST /api/chats/:id/messages`, `/stop`, `/promote` | Reply, interrupt, save as a prompt |

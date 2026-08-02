@@ -1,4 +1,9 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { expect, expectNoPageErrors, test } from './fixtures';
+
+const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 test.describe.configure({ mode: 'serial' });
 
@@ -23,6 +28,59 @@ test('a chat starts, answers, and can be talked to again', async ({ page, consol
   await composer.fill('And the PVCs?');
   await page.getByRole('button', { name: /^(Send|Queue)$/ }).click();
   await expect(page.getByText('And the PVCs?').first()).toBeVisible();
+
+  expectNoPageErrors(consoleErrors);
+});
+
+test('the composer completes a saved prompt and a file in the workspace', async ({ page, consoleErrors }) => {
+  // Something to complete to, created here so this test does not depend on what
+  // the rest of the suite has left behind.
+  const created = await page.request.post('/api/prompts', {
+    data: { name: 'composer-target', prompt: 'Check the cluster and report what changed.' },
+  });
+  const targetId = (await created.json()).id as string;
+
+  await page.goto('/chats');
+  await page.getByRole('link', { name: 'Is the media namespace healthy?' }).click();
+  const chatId = new URL(page.url()).pathname.split('/').pop()!;
+
+  // A file in the chat's workspace for `@` to find. The stub CLI writes
+  // nothing, so without this there would be nothing to complete to.
+  const workspace = path.join(here, '.tmp/data/workspaces', chatId);
+  fs.mkdirSync(path.join(workspace, 'docs'), { recursive: true });
+  fs.writeFileSync(path.join(workspace, 'docs/runbook.md'), '# runbook');
+
+  const composer = page.getByPlaceholder(/Reply to Claude/i);
+  const menu = page.getByRole('listbox', { name: 'Suggestions' });
+  await composer.click();
+
+  // `/` at the start of the message offers saved prompts, and picking one drops
+  // its whole text in — nothing is sent, and nothing is interpreted.
+  await composer.pressSequentially('/composer');
+  await expect(menu.getByRole('option', { name: /composer-target/ })).toBeVisible();
+  await menu.getByRole('option', { name: /composer-target/ }).click();
+  await expect(composer).toHaveValue('Check the cluster and report what changed.');
+
+  // `@` looks in the working directory, and the chosen path lands in the
+  // sentence being written rather than replacing it.
+  await composer.fill('');
+  await composer.pressSequentially('look at @runbook');
+  await expect(menu.getByRole('option', { name: 'docs/runbook.md' })).toBeVisible();
+  await composer.press('Enter');
+  await expect(composer).toHaveValue('look at @docs/runbook.md ');
+
+  // Enter took the suggestion rather than sending, so the message is still here.
+  await expect(page.getByText('look at @docs/runbook.md').first()).toBeVisible();
+
+  // And a trigger can be abandoned.
+  await composer.pressSequentially('and @doc');
+  await expect(menu).toBeVisible();
+  await composer.press('Escape');
+  await expect(menu).toHaveCount(0);
+
+  // Taken away again: the prompt list is shared with the rest of the suite, and
+  // a fixture left lying around is somebody else's flaky test.
+  await page.request.delete(`/api/prompts/${targetId}`);
 
   expectNoPageErrors(consoleErrors);
 });
