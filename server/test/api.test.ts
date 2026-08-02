@@ -494,6 +494,62 @@ test('status reports the build, the quota and what the runs can reach', async ()
 });
 
 // --------------------------------------------------------------------------
+// Completion in the composer
+// --------------------------------------------------------------------------
+
+test('a prompt can list the files in its workspace, and only those', async () => {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+
+  const created = await kube.request({
+    method: 'POST',
+    url: '/api/prompts',
+    payload: { name: 'with-files', prompt: 'work in here' },
+  });
+  const promptId = created.json<{ id: string }>().id;
+
+  // The managed workspace this prompt would run in, with a shape worth
+  // completing against and two directories nobody wants suggested.
+  const root = path.join(kube.dir, 'workspaces', promptId);
+  fs.mkdirSync(path.join(root, 'server/src'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'node_modules/left-pad'), { recursive: true });
+  fs.mkdirSync(path.join(root, '.git'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'server/src/db.ts'), 'export const db = 1;');
+  fs.writeFileSync(path.join(root, 'README.md'), '# hello');
+  fs.writeFileSync(path.join(root, 'node_modules/left-pad/index.js'), '');
+  fs.writeFileSync(path.join(root, '.git/HEAD'), 'ref: refs/heads/main');
+
+  const all = await kube.request({ method: 'GET', url: `/api/prompts/${promptId}/files` });
+  assert.equal(all.status, 200);
+  const listing = all.json<{ root: string; items: Array<{ path: string; directory: boolean }> }>();
+  assert.equal(listing.root, root);
+
+  const paths = listing.items.map((item) => item.path);
+  assert.ok(paths.includes('README.md'));
+  assert.ok(paths.includes('server/'));
+  // Suggesting a dependency tree or the object store would drown everything
+  // worth picking.
+  assert.ok(!paths.some((entry) => entry.startsWith('node_modules')), paths.join(', '));
+  assert.ok(!paths.some((entry) => entry.startsWith('.git')), paths.join(', '));
+
+  const filtered = await kube.request({ method: 'GET', url: `/api/prompts/${promptId}/files?q=db` });
+  assert.deepEqual(
+    filtered.json<{ items: Array<{ path: string }> }>().items.map((item) => item.path),
+    ['server/src/db.ts'],
+  );
+
+  // The query only ever filters what the walk already found; it cannot climb
+  // out of the workspace.
+  const escape = await kube.request({
+    method: 'GET',
+    url: `/api/prompts/${promptId}/files?q=${encodeURIComponent('../../kubeclaude.db')}`,
+  });
+  assert.deepEqual(escape.json<{ items: unknown[] }>().items, []);
+
+  assert.equal((await kube.request({ method: 'GET', url: '/api/prompts/nope/files' })).status, 404);
+});
+
+// --------------------------------------------------------------------------
 // The error feed
 // --------------------------------------------------------------------------
 

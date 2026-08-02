@@ -1,5 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { workspaceFor } from '../claude/runner.js';
+import { suggestFiles } from '../claude/workspace-files.js';
 import { cancelRunsForPrompt, enqueueRun } from '../queue.js';
 import * as promptStore from '../store/prompts.js';
 import * as triggerStore from '../store/triggers.js';
@@ -13,6 +15,11 @@ import {
 } from './schemas.js';
 
 const idParams = z.object({ id: z.string().min(1) });
+
+const fileQuery = z.object({
+  q: z.string().max(200).default(''),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+});
 
 export async function promptRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/prompts', async () => {
@@ -76,6 +83,25 @@ export async function promptRoutes(app: FastifyInstance): Promise<void> {
     cancelRunsForPrompt(id);
     promptStore.deletePrompt(id);
     return reply.code(204).send();
+  });
+
+  /**
+   * Files under this prompt's working directory, for the composer's `@`
+   * completion. Names only — no contents — and the walk is rooted in the
+   * workspace, so `q` can only ever filter what is already there.
+   */
+  app.get('/api/prompts/:id/files', async (request, reply) => {
+    const params = idParams.safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ error: 'Invalid id' });
+
+    const prompt = promptStore.getPrompt(params.data.id);
+    if (!prompt) return reply.code(404).send({ error: 'Not found' });
+
+    const query = fileQuery.safeParse(request.query);
+    if (!query.success) return reply.code(400).send({ error: 'Invalid query' });
+
+    const root = workspaceFor(prompt);
+    return { root, items: suggestFiles(root, query.data.q, query.data.limit) };
   });
 
   app.post('/api/prompts/:id/run', async (request, reply) => {
