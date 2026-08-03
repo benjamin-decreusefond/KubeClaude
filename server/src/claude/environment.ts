@@ -42,10 +42,27 @@ export async function onPath(command: string): Promise<boolean> {
   }
 }
 
+/**
+ * Cached for the lifetime of the process.
+ *
+ * PATH does not change under a running server, and the only thing that would
+ * change the answer — a different image — comes with a different process. The
+ * first version of this probed on every run, which spawned eight `which`
+ * processes before each one could start: pure latency on the hot path, for an
+ * answer that cannot have changed since the last time it was asked.
+ */
+let toolCache: Promise<ToolAvailability[]> | null = null;
+
 export async function probeTools(): Promise<ToolAvailability[]> {
-  return Promise.all(
+  toolCache ??= Promise.all(
     PROBED_TOOLS.map(async (name) => ({ name, available: await onPath(name) })),
   );
+  return toolCache;
+}
+
+/** Drop the cache. For tests that change PATH under a live process. */
+export function resetProbeCache(): void {
+  toolCache = null;
 }
 
 export interface BrowserAvailability {
