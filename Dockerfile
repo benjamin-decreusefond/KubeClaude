@@ -13,9 +13,9 @@ RUN apt-get update \
 COPY package.json package-lock.json* ./
 COPY server/package.json server/
 COPY web/package.json web/
-# The e2e workspace has to exist for the install to resolve, but its browsers
-# have no business in a runtime image — they are installed in CI, where the
-# browser pass actually runs.
+# The e2e workspace has to exist for the install to resolve, but nothing here
+# should fetch a browser: CI installs its own for the e2e pass, and the runtime
+# stage installs the one runs actually use, to a shared path.
 COPY e2e/package.json e2e/
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 RUN npm install --no-audit --no-fund
@@ -62,17 +62,41 @@ ARG CLAUDE_CODE_VERSION=latest
 RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
     && npm cache clean --force
 
+# A headless browser, for runs that have to look at a rendered page rather than
+# at HTML — a screenshot of a dashboard, a check that a deploy actually serves
+# something.
+#
+# It has to be baked in. The image runs as an unprivileged user, so a run cannot
+# install one for itself: `playwright install chromium` downloads happily into
+# $HOME and then fails to launch on missing shared libraries, and installing
+# those needs a root nobody has. That failure mode costs a whole session to
+# discover, because the download succeeding looks like progress.
+#
+# Installed to a root-owned path that everyone can read, so no run can corrupt
+# the browser for the next one, and PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD stops a
+# project's own postinstall from fetching a second copy into $HOME.
+ARG PLAYWRIGHT_VERSION=1.56.0
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers
+RUN npx --yes playwright-core@${PLAYWRIGHT_VERSION} install --with-deps chromium-headless-shell \
+    && chmod -R a+rX /opt/pw-browsers \
+    && rm -rf /var/lib/apt/lists/* /root/.npm
+
 # Stamped by CI with the release tag or the commit SHA, and reported by
 # /api/status. Without it a running instance cannot say which build it is, which
 # is exactly the question after a deploy.
 ARG APP_VERSION=dev
 
+# PLAYWRIGHT_BROWSERS_PATH is set above, next to the install. PLAYWRIGHT_SKIP_
+# BROWSER_DOWNLOAD below is the other half of it: a run that npm-installs a
+# project with Playwright among its dependencies must not have the postinstall
+# pull a second browser into $HOME — slow, and unlaunchable when it lands.
 ENV NODE_ENV=production \
     APP_VERSION=${APP_VERSION} \
     DATA_DIR=/data \
     WEB_DIR=/app/web/dist \
     PORT=8080 \
-    HOME=/data/home
+    HOME=/data/home \
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 
 WORKDIR /app
 

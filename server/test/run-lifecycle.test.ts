@@ -320,11 +320,20 @@ test('the environment briefing reaches every run, ahead of the prompt’s own in
   );
 });
 
-test('an empty briefing adds nothing', async () => {
+test('an empty briefing contributes nothing of its own, but the probe still goes', async () => {
   updateSettings({ environmentBriefing: '' });
   const prompt = makePrompt();
   await waitForTerminal(enqueueRun({ promptId: prompt.id, triggerType: 'manual' })!.id);
-  assert.equal(invocations()[0]!.argv.includes('--append-system-prompt'), false);
+
+  // Clearing the briefing says "do not tell runs about my platform". It does not
+  // say "hide which tools exist" — that is not an opinion, it is the container,
+  // and a run that has to discover it by trial spends a session doing so.
+  const { argv } = invocations()[0]!;
+  const system = argv[argv.indexOf('--append-system-prompt') + 1]!;
+  assert.match(system, /What this image actually has/);
+  assert.match(system, /no root/i);
+  // Nothing of the operator's own text, since there is none.
+  assert.equal(system.startsWith('# What this image actually has'), true);
 });
 
 test('kubectl can find the cluster from inside a run', async () => {
@@ -435,11 +444,12 @@ test('what a run is made of reaches the CLI too', async () => {
   assert.equal(argv[argv.indexOf('--tools') + 1], 'Bash,Read');
   assert.equal(argv[argv.indexOf('--setting-sources') + 1], 'user');
   // Replacing the system prompt does not throw away what KubeClaude appends:
-  // both flags travel together, and the prompt's own instruction survives.
-  assert.equal(
-    argv[argv.indexOf('--append-system-prompt') + 1],
-    'Only ever touch the media directory.',
-  );
+  // both flags travel together, and the prompt's own instruction survives —
+  // alongside the capability probe, which is about the container rather than
+  // about the task and so is not the prompt's to replace.
+  const system = argv[argv.indexOf('--append-system-prompt') + 1]!;
+  assert.match(system, /Only ever touch the media directory\./);
+  assert.match(system, /What this image actually has/);
 });
 
 test('an empty tool set and "no settings files" are passed, not skipped', async () => {

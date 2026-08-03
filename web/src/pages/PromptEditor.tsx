@@ -467,7 +467,19 @@ export function PromptEditor() {
                       {tool.available ? '' : ' missing'}
                     </Badge>
                   ))}
+                  {/* Off PATH, so it needs its own badge rather than a row in the list. */}
+                  <Badge tone={capabilities.browser.available ? 'good' : undefined}>
+                    <span className="badge-dot" />
+                    browser
+                    {capabilities.browser.available ? '' : ' missing'}
+                  </Badge>
                 </div>
+                {capabilities.browser.available && (
+                  <p className="stat-note" style={{ marginTop: 8 }}>
+                    Playwright finds it on its own; a run should never call{' '}
+                    <code>playwright install</code>. Path: <code>{capabilities.browser.executablePath}</code>
+                  </p>
+                )}
               </div>
             )}
           </Card>
