@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { api, getToken, setToken } from '../api';
+import { BrandMark } from './BrandMark';
 import { Banner, Card, Checkbox, Field } from './primitives';
 import type { AuthMethod, AuthState } from '../types';
 
@@ -69,7 +70,7 @@ function Shell({ children }: { children: ReactNode }) {
       <div className="auth-panel">
         <div className="brand" style={{ marginBottom: 18 }}>
           <div className="brand-mark" aria-hidden>
-            KC
+            <BrandMark size={20} />
           </div>
           <div>
             <div className="brand-name">KubeClaude</div>
