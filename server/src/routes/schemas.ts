@@ -100,6 +100,15 @@ export const settingSourcesSchema = z
   )
   .nullable();
 
+/**
+ * A prompt's turn cap, where null and 0 are two different answers: null inherits
+ * `defaultMaxTurns`, and 0 opts out of any cap on purpose — which is what the
+ * runner reads (`prompt.maxTurns ?? defaultMaxTurns`, so a 0 does not fall
+ * through) and what the editor tells you to type. Rejecting 0 here made that
+ * documented escape hatch unreachable through the API.
+ */
+export const maxTurnsSchema = z.number().int().min(0).max(1000).nullable().default(null);
+
 /** Built-in tool names, as the CLI spells them: Bash, Edit, Read, WebFetch… */
 export const builtinToolsSchema = z
   .array(z.string().min(1).max(80).regex(/^[A-Za-z0-9_]+$/, 'Use a built-in tool name'))
@@ -127,7 +136,7 @@ export const promptCreateSchema = z.object({
   agentsJson: jsonText('Agents definition').default(null),
   builtinTools: builtinToolsSchema.default(null),
   settingSources: settingSourcesSchema.default(null),
-  maxTurns: z.number().int().positive().max(1000).nullable().default(null),
+  maxTurns: maxTurnsSchema,
   timeoutSeconds: z.number().int().min(30).max(86_400).default(1800),
   env: envRecord.default({}),
   mcpConfig: jsonText('MCP config').default(null),
@@ -285,7 +294,7 @@ const goalPromptSchema = z.object({
   agentsJson: jsonText('Agents definition').default(null),
   builtinTools: builtinToolsSchema.default(null),
   settingSources: settingSourcesSchema.default(null),
-  maxTurns: z.number().int().positive().max(1000).nullable().default(null),
+  maxTurns: maxTurnsSchema,
   timeoutSeconds: z.number().int().min(30).max(86_400).default(3600),
 });
 

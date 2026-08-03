@@ -127,7 +127,8 @@ test('a runaway run is killed once it crosses the per-run ceiling', async () => 
   const prompt = makePrompt();
   const run = await waitForTerminal(enqueueRun({ promptId: prompt.id, triggerType: 'manual' })!.id);
 
-  assert.equal(run.status, 'failed');
+  // A ceiling KubeClaude was told to enforce, not a fault in the task.
+  assert.equal(run.status, 'capped');
   assert.match(run.error ?? '', /per-run ceiling of 45000 tokens/);
   // Terminal on purpose: resuming would spend the whole ceiling again.
   assert.equal(run.autoResumePending, false);

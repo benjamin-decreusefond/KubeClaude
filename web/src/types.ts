@@ -6,7 +6,9 @@ export type RunStatus =
   | 'cancelled'
   | 'timeout'
   | 'skipped'
-  | 'rate_limited';
+  | 'rate_limited'
+  /** Stopped by a KubeClaude ceiling (turn cap or per-run token cap), not by a fault. */
+  | 'capped';
 
 export type TriggerType = 'cron' | 'interval' | 'session_reset' | 'weekly_reset' | 'quota_available';
 
