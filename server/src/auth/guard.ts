@@ -74,6 +74,41 @@ export function isLocalAddress(address: string | undefined): boolean {
     v6.startsWith('fea') || v6.startsWith('feb');
 }
 
+/**
+ * Headers that only exist because something in front of KubeClaude terminated
+ * the connection and passed the request on.
+ */
+const FORWARDING_HEADERS = [
+  'x-forwarded-for',
+  'x-forwarded-host',
+  'x-real-ip',
+  'forwarded',
+  'cf-connecting-ip',
+] as const;
+
+/**
+ * True when a request shows signs of having come through a proxy whose address
+ * we are not deriving `request.ip` from.
+ *
+ * This is the trap the local bypass sets. With `TRUST_PROXY` off, `request.ip`
+ * is the peer that opened the socket — behind an ingress, a reverse proxy or a
+ * tunnel, that is the proxy itself, and a proxy is almost always on a private
+ * address. So "requests from 10./172.16-31./192.168. get in without signing in"
+ * silently becomes "everyone on the internet gets in without signing in".
+ *
+ * A direct client can of course set these headers itself. That only ever costs
+ * it the bypass, so the check fails closed either way.
+ */
+export function forwardedByProxy(request: FastifyRequest): boolean {
+  // With TRUST_PROXY on, `request.ip` is already the forwarded address, which
+  // is the client — so the presence of the headers says nothing alarming.
+  if (config.trustProxy) return false;
+  return FORWARDING_HEADERS.some((name) => {
+    const value = request.headers[name];
+    return Array.isArray(value) ? value.length > 0 : typeof value === 'string' && value.trim() !== '';
+  });
+}
+
 export function readCookie(request: FastifyRequest, name: string): string | null {
   const header = request.headers.cookie;
   if (!header) return null;
@@ -233,5 +268,11 @@ export function localBypassApplies(request: FastifyRequest): boolean {
   const { method } = effectiveMethod();
   if (method === 'none') return false;
   if (getAuthConfig().requirement !== 'local_bypass') return false;
+  // The address we are about to call "local" has to be the client's. Once a
+  // proxy is in the path and we are not reading its forwarded address, it is
+  // the proxy's, and letting it through would open the instance to everyone
+  // who can reach that proxy. Refusing costs a sign-in; allowing costs the
+  // cluster.
+  if (forwardedByProxy(request)) return false;
   return isLocalAddress(request.ip);
 }

@@ -336,6 +336,13 @@ export interface AuthState {
   staticTokenRequired: boolean;
   /** This request came from a private address, so the local bypass could apply. */
   local: boolean;
+  /**
+   * The request arrived through a proxy while `TRUST_PROXY` is off, so the
+   * address the local bypass would judge is the proxy's rather than the
+   * caller's. The bypass is refused in that case, and the UI says why — an
+   * instance can otherwise sit wide open with the setting looking correct.
+   */
+  behindProxy: boolean;
 }
 
 export interface Settings {

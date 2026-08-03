@@ -42,6 +42,8 @@ export interface AuthState {
   /** Setting the first password requires presenting KUBECLAUDE_AUTH_TOKEN. */
   staticTokenRequired: boolean;
   local: boolean;
+  /** Requests arrive through a proxy with TRUST_PROXY off, so the local bypass is refused. */
+  behindProxy: boolean;
 }
 
 export interface AuthConfig {
@@ -56,6 +58,8 @@ export interface AuthConfig {
   hasApiKey: boolean;
   staticTokenConfigured: boolean;
   activeSessions: number;
+  /** This page was loaded through a proxy with TRUST_PROXY off, so the local bypass cannot apply. */
+  behindProxy: boolean;
 }
 
 export interface SetupInput {

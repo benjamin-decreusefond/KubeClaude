@@ -259,8 +259,17 @@ the password or switching method revokes them for real.
 **Skip authentication on the local network** is the other switch, the same one Sonarr and
 Radarr offer: requests from `127.0.0.1`, `10.`, `172.16–31.`, `192.168.` and IPv6 ULA get
 in without signing in. Convenient at home, and wrong the moment that port is reachable
-from outside — note that behind a reverse proxy *every* request looks local unless the
-proxy sets the forwarded headers.
+from outside.
+
+That switch has a sharp edge, so KubeClaude blunts it. Behind a reverse proxy or an
+ingress the address it sees is the *proxy's*, which is itself private — so "my LAN" would
+quietly mean "anyone who can reach the proxy", i.e. the internet. Any request carrying
+`X-Forwarded-For`, `X-Real-IP`, `Forwarded`, `X-Forwarded-Host` or `CF-Connecting-IP`
+while `TRUST_PROXY` is off is therefore **never** granted the bypass, whatever the address
+it arrived from; the setup screen does not offer the option at all in that case, and
+Settings → Security says so where the switch is. Set `TRUST_PROXY=true` — once the proxy
+really overwrites the header — and the bypass judges the forwarded client address instead,
+which is the address you meant.
 
 By default KubeClaude never looks at `X-Forwarded-For` — it is a header any direct client
 can set, so trusting it would let a remote attacker claim to be `127.0.0.1` and walk past

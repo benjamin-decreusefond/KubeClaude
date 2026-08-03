@@ -47,7 +47,11 @@ export function AuthGate({ children }: { children: (state: AuthState, reload: ()
   if (state.setupRequired && !state.authenticated) {
     return (
       <Shell>
-        <Setup tokenRequired={state.staticTokenRequired} onDone={() => void load()} />
+        <Setup
+          tokenRequired={state.staticTokenRequired}
+          behindProxy={state.behindProxy}
+          onDone={() => void load()}
+        />
       </Shell>
     );
   }
@@ -83,7 +87,15 @@ function Shell({ children }: { children: ReactNode }) {
   );
 }
 
-function Setup({ tokenRequired, onDone }: { tokenRequired: boolean; onDone: () => void }) {
+function Setup({
+  tokenRequired,
+  behindProxy,
+  onDone,
+}: {
+  tokenRequired: boolean;
+  behindProxy: boolean;
+  onDone: () => void;
+}) {
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -189,12 +201,25 @@ function Setup({ tokenRequired, onDone }: { tokenRequired: boolean; onDone: () =
         </select>
       </Field>
 
-      <Checkbox
-        checked={localBypass}
-        onChange={setLocalBypass}
-        label="Skip authentication on the local network"
-        hint="Anything from 10./172.16-31./192.168./loopback gets in without signing in. Convenient at home; wrong the moment this port is reachable from outside."
-      />
+      {behindProxy ? (
+        // Not offered rather than offered and refused: this page arrived through
+        // a proxy, so the address the bypass would judge is the proxy's, and
+        // ticking the box would read as "my LAN" while meaning "the internet".
+        <Banner>
+          <strong>Skip authentication on the local network</strong> is not offered here: this page reached
+          KubeClaude through a proxy while <code>TRUST_PROXY</code> is off, so every request looks local and
+          the setting would let anyone in. Set <code>TRUST_PROXY=true</code> — once the proxy overwrites{' '}
+          <code>X-Forwarded-For</code> rather than appending to it — and the option appears in Settings →
+          Security.
+        </Banner>
+      ) : (
+        <Checkbox
+          checked={localBypass}
+          onChange={setLocalBypass}
+          label="Skip authentication on the local network"
+          hint="Anything from 10./172.16-31./192.168./loopback gets in without signing in. Convenient at home; wrong the moment this port is reachable from outside."
+        />
+      )}
 
       {tokenRequired ? (
         <Field
