@@ -214,8 +214,9 @@ async function prepare(options: RunnerOptions): Promise<PreparedInvocation> {
   // The probe goes after the operator's briefing and before the prompt's own
   // instructions: the briefing says what this platform is for, the probe says
   // what this container can actually do, and the prompt says what to do with it.
-  // Probed per run rather than cached, so an image swap is reflected without a
-  // restart, and so it can never describe a container this is not running in.
+  // The PATH half is cached for the process — an image swap arrives as a new
+  // process, so re-running `which` before every run bought nothing and delayed
+  // each start by eight spawns.
   const systemPromptParts = [
     options.environmentBriefing?.trim(),
     await describeCapabilities(),
