@@ -4,6 +4,7 @@ import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { claudeCredentials, config, forwardedEnvPrefixes } from '../config.js';
+import { describeCapabilities } from './environment.js';
 import { DEFAULT_GIT_IDENTITY, prepareRepository, writeGitConfig, type GitIdentity } from './git.js';
 import { buildMcpDocument } from '../store/mcp.js';
 import { weighTokens } from '../store/usage.js';
@@ -210,8 +211,14 @@ async function prepare(options: RunnerOptions): Promise<PreparedInvocation> {
   // last part is added by the caller — in marker mode it tells the model how to
   // announce that it finished, without which the completion check can never say
   // "done". Assembled here, but only pushed once everything is known.
+  // The probe goes after the operator's briefing and before the prompt's own
+  // instructions: the briefing says what this platform is for, the probe says
+  // what this container can actually do, and the prompt says what to do with it.
+  // Probed per run rather than cached, so an image swap is reflected without a
+  // restart, and so it can never describe a container this is not running in.
   const systemPromptParts = [
     options.environmentBriefing?.trim(),
+    await describeCapabilities(),
     prompt.appendSystemPrompt?.trim(),
     options.appendSystemPrompt?.trim(),
   ].filter((part): part is string => Boolean(part));

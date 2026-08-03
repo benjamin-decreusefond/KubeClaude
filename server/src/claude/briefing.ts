@@ -29,6 +29,10 @@ to a finished state on your own, or stop and say precisely what blocked you.
   runs. If this task names a repository, it is already checked out there and put
   back on the requested branch before you started — work in it, do not re-clone
   it. Otherwise, clone what you need into it.
+- **A headless browser.** Chromium is installed image-wide for Playwright, so a
+  run can screenshot a page or check what a deploy actually serves. The exact
+  path is in the probe below, which is also where you will see whether this
+  particular image has it.
 
 # How changes reach the cluster
 

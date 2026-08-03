@@ -1,7 +1,6 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import type { FastifyInstance } from 'fastify';
 import { claudeVersion } from '../claude/runner.js';
+import { probeBrowser, probeTools } from '../claude/environment.js';
 import { MODEL_CATALOG } from '../claude/models.js';
 import { TOOL_PRESETS } from '../claude/tool-presets.js';
 import {
@@ -19,17 +18,6 @@ import { DEFAULT_SETTINGS, getSettings, updateSettings } from '../store/settings
 import { getQuotaState, listWindows } from '../store/usage.js';
 import { getDashboard } from '../store/stats.js';
 import { settingsUpdateSchema } from './schemas.js';
-
-const execFileAsync = promisify(execFile);
-
-async function onPath(command: string): Promise<boolean> {
-  try {
-    await execFileAsync('which', [command]);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 export async function systemRoutes(app: FastifyInstance): Promise<void> {
   app.get('/healthz', async () => ({ status: 'ok' }));
@@ -74,15 +62,15 @@ export async function systemRoutes(app: FastifyInstance): Promise<void> {
    * you a GitHub token is wired up without exposing it.
    */
   app.get('/api/capabilities', async () => {
-    const tools = await Promise.all(
-      ['claude', 'git', 'gh', 'kubectl', 'rg', 'jq', 'node', 'python3'].map(async (name) => ({
-        name,
-        available: await onPath(name),
-      })),
-    );
+    const tools = await probeTools();
     const settings = getSettings();
     return {
       tools,
+      /**
+       * The headless browser, reported separately because it is not on PATH:
+       * it lives under PLAYWRIGHT_BROWSERS_PATH and is found by walking it.
+       */
+      browser: probeBrowser(),
       /**
        * What a run's git will do before it is asked to. The token is reported
        * as present or not, never echoed.

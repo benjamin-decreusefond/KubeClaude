@@ -435,6 +435,13 @@ export interface Status {
 
 export interface Capabilities {
   tools: Array<{ name: string; available: boolean }>;
+  /** The headless browser, which lives off PATH under PLAYWRIGHT_BROWSERS_PATH. */
+  browser: {
+    available: boolean;
+    executablePath: string | null;
+    browsersPath: string | null;
+    headlessShell: boolean;
+  };
   git: { userName: string; userEmail: string; githubToken: boolean; tokenWithheld: boolean };
   credentials: { configured: boolean; mode: BillingMode; variables: string[]; ignored: string[] };
   forwardedEnvPrefixes: string[];
