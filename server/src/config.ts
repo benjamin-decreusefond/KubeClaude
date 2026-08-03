@@ -86,6 +86,17 @@ export const config = {
   /** Serve the built SPA from the server. */
   serveWeb: bool('SERVE_WEB', true),
   webDir: process.env.WEB_DIR ?? path.resolve(process.cwd(), 'web/dist'),
+
+  /**
+   * Whether `request.ip` may be taken from `X-Forwarded-For`. Off by default,
+   * because trusting that header blindly hands a direct client control over the
+   * address the "skip auth on the local network" check and the login lockout
+   * key on — a spoofed `X-Forwarded-For: 127.0.0.1` would pass for on-LAN, and a
+   * rotated one would defeat the lockout. Only turn this on when something in
+   * front of KubeClaude actually overwrites the header rather than appending to
+   * it, e.g. a properly configured ingress or oauth2-proxy.
+   */
+  trustProxy: bool('TRUST_PROXY', false),
 } as const;
 
 /** How a run is paying for itself. */

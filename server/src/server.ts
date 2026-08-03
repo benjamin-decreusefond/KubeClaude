@@ -30,7 +30,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   const app = Fastify({
     logger: false,
     bodyLimit: 4 * 1024 * 1024,
-    trustProxy: true,
+    trustProxy: config.trustProxy,
   });
 
   /**

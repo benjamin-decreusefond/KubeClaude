@@ -100,6 +100,7 @@ Everything is environment variables; the rest is configured in the UI.
 | `MAX_STORED_ERRORS` | `200` | Distinct faults kept in the error feed. |
 | `KUBECLAUDE_AUTH_TOKEN` | — | A static credential accepted as `Authorization: Bearer` or `X-Api-Key`, on top of whatever login method is configured. |
 | `AUTH_METHOD` | — | Pin the login method to `none`, `forms`, `basic` or `external`. Set it and the UI shows the choice as locked, so an instance deliberately placed behind an SSO proxy cannot have that turned off from inside the app. |
+| `TRUST_PROXY` | `false` | Derive `request.ip` (the local-network bypass, the login lockout key) from `X-Forwarded-For`. Only set `true` behind a proxy that overwrites the header rather than appending to it. |
 | `FORWARD_ENV_PREFIXES` | — | Comma-separated prefixes of pod env vars to forward into runs, e.g. `GITHUB_,GIT_`. Nothing is forwarded by default. |
 | `EXPOSE_KUBERNETES` | `true` | Forward `KUBERNETES_SERVICE_HOST`/`PORT` so `kubectl` can reach the API server as the pod's ServiceAccount. Set `false` to deny cluster access outright. |
 | `GITHUB_TOKEN` | — | Forwarded into runs (as both `GITHUB_TOKEN` and `GH_TOKEN`) so `git` push over HTTPS and `gh` are authenticated. |
@@ -260,6 +261,13 @@ Radarr offer: requests from `127.0.0.1`, `10.`, `172.16–31.`, `192.168.` and I
 in without signing in. Convenient at home, and wrong the moment that port is reachable
 from outside — note that behind a reverse proxy *every* request looks local unless the
 proxy sets the forwarded headers.
+
+By default KubeClaude never looks at `X-Forwarded-For` — it is a header any direct client
+can set, so trusting it would let a remote attacker claim to be `127.0.0.1` and walk past
+the local-network bypass, or rotate it to dodge the login lockout. Set `TRUST_PROXY=true`
+only once something in front of KubeClaude actually **overwrites** that header rather than
+appending to it (a correctly configured ingress, oauth2-proxy, Cloudflare Tunnel); with
+nothing in front, or a proxy that merely appends, leave it off.
 
 Three details worth knowing. Upgrading an instance that used `KUBECLAUDE_AUTH_TOKEN` does
 not open a window — the setup screen requires that token before it will set a password, so
