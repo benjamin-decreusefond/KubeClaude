@@ -358,7 +358,7 @@ export function PromptEditor() {
 
             <Field
               label="Start from a preset"
-              hint="Every tool Claude can reach carries its schema in the system prompt of every request, so a shorter list is cheaper on every turn. Picking one fills the lists below; edit them freely afterwards."
+              hint="Every tool Claude can reach carries its schema in the system prompt of every request, so a shorter list is cheaper on every turn. Picking one sets the permission mode and both lists above; edit them freely afterwards, then Save."
             >
               <select
                 value=""
@@ -366,9 +366,15 @@ export function PromptEditor() {
                   const preset = presets.find((entry) => entry.id === event.target.value);
                   if (preset) {
                     patch({
+                      permissionMode: preset.permissionMode,
                       allowedTools: preset.allowedTools,
                       disallowedTools: preset.disallowedTools,
                     });
+                    // "Everything" is empty lists on an already-empty prompt, so
+                    // without this the control changes nothing anybody can see
+                    // and reads as broken. Say what it did, and that it is not
+                    // saved yet.
+                    setMessage(`${preset.label} applied — permission mode ${preset.permissionMode}. Save to keep it.`);
                   }
                 }}
               >

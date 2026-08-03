@@ -7,7 +7,7 @@ import * as runs from './store/runs.js';
 import { getPrompt } from './store/prompts.js';
 import { getSettings } from './store/settings.js';
 import { listEnabledTriggers, markFired, updateTrigger } from './store/triggers.js';
-import { getActiveWindow, getQuotaState, windowDurationMs } from './store/usage.js';
+import { getActiveWindow, getKnownResetAt, getQuotaState, windowDurationMs } from './store/usage.js';
 import type { Trigger, WindowKind } from './types.js';
 
 /**
@@ -155,6 +155,12 @@ function intervalDecision(trigger: Trigger, now: Date): FireDecision {
  *
  * `next_fire_at` carries the state, so a run started by this trigger — which
  * itself opens the window — cannot re-trigger the same trigger.
+ *
+ * The window's end is Claude's own reset timestamp wherever one has been
+ * observed, and `started_at` plus the configured length only where none has.
+ * That is the difference between this trigger and a five-hour cron: the cron
+ * repeats on the schedule KubeClaude guessed, and this waits for the moment the
+ * allowance is actually back.
  */
 function windowResetDecision(trigger: Trigger, now: Date, kind: WindowKind): FireDecision {
   const delayMs = (trigger.config.delayMinutes ?? 0) * 60_000;
@@ -162,6 +168,17 @@ function windowResetDecision(trigger: Trigger, now: Date, kind: WindowKind): Fir
 
   if (trigger.nextFireAt && now.getTime() < new Date(trigger.nextFireAt).getTime()) {
     return { fire: false };
+  }
+
+  // A reset Claude has named but that has not arrived yet holds the trigger to
+  // that moment, even when no window is open locally — a window can expire on
+  // our arithmetic while the real allowance is still spent.
+  const known = getKnownResetAt(kind, now);
+  if (known) {
+    const readyAt = new Date(known).getTime() + delayMs;
+    if (now.getTime() < readyAt) {
+      return { fire: false, nextFireAt: new Date(readyAt).toISOString() };
+    }
   }
 
   // The window that will be open once this run starts ends here.

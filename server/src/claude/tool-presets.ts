@@ -1,3 +1,5 @@
+import type { PermissionMode } from '../types.js';
+
 /**
  * Tool sets a prompt can start from.
  *
@@ -17,6 +19,16 @@ export interface ToolPreset {
   description: string;
   allowedTools: string[];
   disallowedTools: string[];
+  /**
+   * The permission mode the preset implies.
+   *
+   * The tool lists decide what exists; this decides what may run without a
+   * human. A preset that sets only the lists is half a decision: an empty
+   * allow list means "the mode decides", so "Everything" applied to a prompt
+   * left on `default` grants nothing at all and changes no visible field —
+   * which reads as a broken control rather than as a no-op.
+   */
+  permissionMode: PermissionMode;
 }
 
 /** Reading and searching, no writes, no network. The cheapest useful set. */
@@ -33,6 +45,9 @@ export const TOOL_PRESETS: ToolPreset[] = [
       'Read, search and run commands — enough for kubectl, logs and events. No file edits, no web.',
     allowedTools: INSPECT,
     disallowedTools: [],
+    // Bash is on the list, and Bash needs approval nobody is here to give.
+    // `auto` lets the ordinary calls through and refuses what it flags.
+    permissionMode: 'auto',
   },
   {
     id: 'repo',
@@ -41,6 +56,7 @@ export const TOOL_PRESETS: ToolPreset[] = [
       'Inspection plus file edits, for prompts that clone, change code and push. No web access.',
     allowedTools: EDIT,
     disallowedTools: ['WebSearch', 'WebFetch'],
+    permissionMode: 'auto',
   },
   {
     id: 'research',
@@ -48,14 +64,19 @@ export const TOOL_PRESETS: ToolPreset[] = [
     description: 'Reading and the web, but nothing that writes. For prompts that gather and report.',
     allowedTools: [...INSPECT, 'WebSearch', 'WebFetch'],
     disallowedTools: ['Write', 'Edit', 'NotebookEdit'],
+    permissionMode: 'auto',
   },
   {
     id: 'full',
     label: 'Everything',
     description:
-      'No restriction. The largest tool schema, so the most tokens spent on every turn of every run.',
+      'No restriction, and no approval prompts. The largest tool schema, so the most tokens spent on every turn of every run.',
     allowedTools: [],
     disallowedTools: [],
+    // The only preset that means it: empty lists plus bypassPermissions is
+    // what "no restriction" has to be, since empty lists on their own defer
+    // to the mode.
+    permissionMode: 'bypassPermissions',
   },
 ];
 

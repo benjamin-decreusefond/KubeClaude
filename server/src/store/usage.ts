@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { db } from '../db.js';
+import { boolFromDb, boolToDb, db } from '../db.js';
 import type { BudgetBasis, UsageTotals, UsageWindow, WindowKind } from '../types.js';
 import { getSettings } from './settings.js';
 
@@ -8,6 +8,7 @@ interface WindowRow {
   kind: string;
   started_at: string;
   ends_at: string;
+  ends_at_observed: number;
   input_tokens: number;
   output_tokens: number;
   cache_creation_tokens: number;
@@ -23,6 +24,7 @@ function toWindow(row: WindowRow): UsageWindow {
     kind: row.kind as WindowKind,
     startedAt: row.started_at,
     endsAt: row.ends_at,
+    endsAtObserved: boolFromDb(row.ends_at_observed),
     inputTokens: row.input_tokens,
     outputTokens: row.output_tokens,
     cacheCreationTokens: row.cache_creation_tokens,
@@ -31,6 +33,119 @@ function toWindow(row: WindowRow): UsageWindow {
     costUsd: row.cost_usd,
     runCount: row.run_count,
   };
+}
+
+export interface QuotaResetObservation {
+  kind: WindowKind;
+  /** When Claude says the allowance returns. */
+  resetAt: string;
+  observedAt: string;
+  source: string;
+  runId: string | null;
+  evidence: string | null;
+}
+
+interface ResetRow {
+  kind: string;
+  reset_at: string;
+  observed_at: string;
+  source: string;
+  run_id: string | null;
+  evidence: string | null;
+}
+
+function toObservation(row: ResetRow): QuotaResetObservation {
+  return {
+    kind: row.kind as WindowKind,
+    resetAt: row.reset_at,
+    observedAt: row.observed_at,
+    source: row.source,
+    runId: row.run_id,
+    evidence: row.evidence,
+  };
+}
+
+/**
+ * Write down when Claude said the allowance comes back, and move the open
+ * window's end to match.
+ *
+ * The window is corrected in the same transaction as the observation: the whole
+ * point is that the gauge, the guard and the reset trigger stop disagreeing
+ * with the thing that actually decides whether a run may start.
+ *
+ * A reset already in the past is dropped rather than stored. It tells us nothing
+ * about the window we are in now, and moving `ends_at` backwards would close a
+ * live window and hand out an allowance that has not returned.
+ */
+export function recordQuotaReset(
+  input: Omit<QuotaResetObservation, 'observedAt' | 'source'> & { source?: string },
+  at: Date = new Date(),
+): QuotaResetObservation | null {
+  const reset = new Date(input.resetAt);
+  if (Number.isNaN(reset.getTime()) || reset.getTime() <= at.getTime()) return null;
+
+  const observation: QuotaResetObservation = {
+    kind: input.kind,
+    resetAt: reset.toISOString(),
+    observedAt: at.toISOString(),
+    source: input.source ?? 'cli',
+    runId: input.runId,
+    evidence: input.evidence,
+  };
+
+  db.transaction(() => {
+    db.prepare(
+      `INSERT INTO quota_resets (id, kind, reset_at, observed_at, source, run_id, evidence)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(kind, reset_at) DO NOTHING`,
+    ).run(
+      randomUUID(),
+      observation.kind,
+      observation.resetAt,
+      observation.observedAt,
+      observation.source,
+      observation.runId,
+      observation.evidence,
+    );
+
+    // Only the window that is open right now: a past window's end is history,
+    // and a future one does not exist yet.
+    const active = getActiveWindow(observation.kind, at);
+    if (active && active.endsAt !== observation.resetAt) {
+      db.prepare('UPDATE usage_windows SET ends_at = ?, ends_at_observed = 1 WHERE id = ?').run(
+        observation.resetAt,
+        active.id,
+      );
+    }
+  })();
+
+  return observation;
+}
+
+/**
+ * The reset Claude has told us about that has not happened yet, if any.
+ *
+ * The *earliest* still-future observation wins. Two live observations mean the
+ * allowance returns twice; the one that matters for "when can I run again" is
+ * the nearer one.
+ */
+export function getKnownResetAt(kind: WindowKind, at: Date = new Date()): string | null {
+  const row = db
+    .prepare<[string, string], ResetRow>(
+      'SELECT * FROM quota_resets WHERE kind = ? AND reset_at > ? ORDER BY reset_at LIMIT 1',
+    )
+    .get(kind, at.toISOString());
+  return row?.reset_at ?? null;
+}
+
+/** Recent observations, newest first — for showing where a reset time came from. */
+export function listQuotaResets(kind: WindowKind, limit = 10): QuotaResetObservation[] {
+  return db
+    .prepare<[string, number], ResetRow>(
+      'SELECT * FROM quota_resets WHERE kind = ? ORDER BY reset_at DESC LIMIT ?',
+    )
+    .all(kind, limit)
+    .map(toObservation);
 }
 
 export function windowDurationMs(kind: WindowKind): number {
@@ -92,15 +207,22 @@ function openWindow(kind: WindowKind, at: Date, countRun: boolean): UsageWindow 
 
   const id = randomUUID();
   const runCount = countRun ? 1 : 0;
-  const endsAt = new Date(at.getTime() + windowDurationMs(kind)).toISOString();
+  // Claude's word on when this allowance returns, if it has given one, rather
+  // than started_at plus the configured duration. The arithmetic assumes the
+  // window opened when KubeClaude first booked a run, which is only true if
+  // nothing else has talked to Claude this session.
+  const known = getKnownResetAt(kind, at);
+  const observed = known !== null;
+  const endsAt = known ?? new Date(at.getTime() + windowDurationMs(kind)).toISOString();
   db.prepare(
-    'INSERT INTO usage_windows (id, kind, started_at, ends_at, run_count) VALUES (?, ?, ?, ?, ?)',
-  ).run(id, kind, at.toISOString(), endsAt, runCount);
+    'INSERT INTO usage_windows (id, kind, started_at, ends_at, ends_at_observed, run_count) VALUES (?, ?, ?, ?, ?, ?)',
+  ).run(id, kind, at.toISOString(), endsAt, boolToDb(observed), runCount);
   return {
     id,
     kind,
     startedAt: at.toISOString(),
     endsAt,
+    endsAtObserved: observed,
     inputTokens: 0,
     outputTokens: 0,
     cacheCreationTokens: 0,
@@ -196,6 +318,12 @@ export interface QuotaSlice {
   remainingPct: number | null;
   /** When the current window closes and the quota resets. */
   resetsAt: string | null;
+  /**
+   * True when `resetsAt` is Claude's own answer rather than our arithmetic.
+   * An estimate is right to within however long ago the session really began;
+   * an observation is right to the minute.
+   */
+  resetsAtObserved: boolean;
   /** True when no window is open, i.e. the full allowance is available. */
   fresh: boolean;
   exhausted: boolean;
@@ -218,6 +346,9 @@ function slice(
 ): QuotaSlice {
   const window = getActiveWindow(kind, at);
   const used = window ? budgetedTokens(window, basis) : 0;
+  // With no window open the allowance is already back, so a pending observation
+  // is the next reset rather than this one — hence only the open window's end.
+  const known = window ? getKnownResetAt(kind, at) : null;
   const effectiveBudget = budget > 0 ? Math.max(0, Math.floor(budget * (1 - reservePct / 100))) : 0;
   const remaining = effectiveBudget > 0 ? Math.max(0, effectiveBudget - used) : null;
   const remainingPct =
@@ -230,7 +361,8 @@ function slice(
     budget: effectiveBudget,
     remaining,
     remainingPct,
-    resetsAt: window?.endsAt ?? null,
+    resetsAt: known ?? window?.endsAt ?? null,
+    resetsAtObserved: known !== null || (window?.endsAtObserved ?? false),
     fresh: window === null,
     exhausted: remaining !== null && remaining <= 0,
   };
