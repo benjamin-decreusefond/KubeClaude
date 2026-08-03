@@ -8,7 +8,7 @@ const TRIGGER_HELP: Record<TriggerType, string> = {
   cron: 'Runs on a cron schedule. After downtime it catches up once, not once per missed slot.',
   interval: 'Runs every N minutes, measured from the last fire.',
   session_reset:
-    'Runs once per rolling 5-hour Claude window: immediately when no window is open, then again as soon as the window rolls over. This is the "run as soon as I have tokens again" trigger.',
+    'Runs once per rolling 5-hour Claude window: immediately when no window is open, then again as soon as the window rolls over. Once Claude has told KubeClaude when the allowance returns — it says so whenever it refuses a run for quota — that exact moment is used instead of a five-hour estimate, so this waits for the real reset rather than a guessed one.',
   weekly_reset: 'Runs once per weekly window, as soon as the week rolls over.',
   quota_available:
     'Runs when a configured share of the token budget is free again. Needs a token budget in Settings; without one it behaves like the 5-hour trigger.',

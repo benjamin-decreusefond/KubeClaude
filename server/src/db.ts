@@ -318,6 +318,50 @@ const MIGRATIONS: Array<{ name: string; up: string }> = [
       ALTER TABLE prompts ADD COLUMN setting_sources TEXT;
     `,
   },
+  {
+    name: '009_quota_resets',
+    up: `
+      /*
+       * When Claude says the allowance comes back.
+       *
+       * A usage window's ends_at used to be a guess: started_at plus five
+       * hours, anchored on the first run KubeClaude happened to book. Claude's
+       * real window is anchored on the first message of the session wherever it
+       * was sent — the desktop app, a terminal, another machine — so the two
+       * drift apart, and a "new 5h session" trigger built on the guess is a
+       * five-hour cron that is wrong by however far they have drifted.
+       *
+       * The CLI tells us the truth when it refuses a run: "usage limit
+       * reached|<epoch>". That is worth keeping past the run it arrived on, so
+       * the window, the gauge and the trigger can all key off the real moment
+       * rather than off arithmetic.
+       *
+       * One row per observation rather than one per window: observations are
+       * evidence, and evidence is append-only. The newest still-future row for
+       * a kind is the one that counts.
+       */
+      CREATE TABLE quota_resets (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        reset_at TEXT NOT NULL,
+        observed_at TEXT NOT NULL,
+        /* Where it came from, so a guess can never be mistaken for a fact. */
+        source TEXT NOT NULL DEFAULT 'cli',
+        run_id TEXT,
+        evidence TEXT
+      );
+      CREATE INDEX idx_quota_resets ON quota_resets(kind, reset_at DESC);
+      /* The same reset observed twice is one fact, not two. */
+      CREATE UNIQUE INDEX idx_quota_resets_unique ON quota_resets(kind, reset_at);
+
+      /*
+       * Set when a window's end came from an observation rather than from
+       * duration arithmetic. The gauge says "resets at" either way; only this
+       * says whether to believe it to the minute.
+       */
+      ALTER TABLE usage_windows ADD COLUMN ends_at_observed INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
 ];
 
 export function migrate(): void {

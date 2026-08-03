@@ -8,7 +8,7 @@ import * as runs from './store/runs.js';
 import { getPrompt, updatePrompt } from './store/prompts.js';
 import { getSettings } from './store/settings.js';
 import { recordError } from './store/errors.js';
-import { addUsage, currentWindows, getQuotaState, openWindows } from './store/usage.js';
+import { addUsage, currentWindows, getQuotaState, openWindows, recordQuotaReset } from './store/usage.js';
 import type { Run, RunStatus } from './types.js';
 
 const inFlight = new Map<string, AbortController>();
@@ -262,6 +262,20 @@ async function execute(run: Run): Promise<void> {
     } else {
       const limit = detectRateLimit(result.resultText, result.stderr, result.subtype);
       if (limit.limited) {
+        // Claude just told us when this allowance comes back. Keep it: it is the
+        // only moment the truth is on offer, and it outlives this run — the
+        // window gauge and the reset trigger both key off it from here.
+        if (limit.resetAt) {
+          recordQuotaReset({
+            // An unattributed limit is the 5-hour one far more often than the
+            // weekly one, and treating it as weekly would push the next window
+            // days out on a guess.
+            kind: limit.scope === 'weekly' ? 'weekly' : 'session',
+            resetAt: limit.resetAt,
+            runId: run.id,
+            evidence: limit.evidence,
+          });
+        }
         // Decide whether the task was already done *before* publishing a terminal
         // status, so watchers never see a finished run without its verdict.
         const verdict = await assessCompletion(prompt, {

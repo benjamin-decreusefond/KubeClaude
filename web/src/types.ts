@@ -310,6 +310,8 @@ export interface QuotaSlice {
   remaining: number | null;
   remainingPct: number | null;
   resetsAt: string | null;
+  /** `resetsAt` is Claude's own answer, not our five-hour arithmetic. */
+  resetsAtObserved: boolean;
   fresh: boolean;
   exhausted: boolean;
 }
@@ -476,6 +478,8 @@ export interface ToolPreset {
   description: string;
   allowedTools: string[];
   disallowedTools: string[];
+  /** The permission mode the preset implies; applied along with the lists. */
+  permissionMode: PermissionMode;
 }
 
 export interface ModelOption {

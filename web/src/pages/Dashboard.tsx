@@ -291,7 +291,9 @@ function QuotaCard({
         slice.fresh
           ? 'Fully reset'
           : slice.resetsAt
-            ? `Resets ${formatRelative(slice.resetsAt, now)}`
+            ? `Resets ${formatRelative(slice.resetsAt, now)}${
+                slice.resetsAtObserved ? '' : ' (estimated)'
+              }`
             : undefined
       }
     >

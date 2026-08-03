@@ -229,6 +229,11 @@ export interface UsageWindow {
   kind: WindowKind;
   startedAt: string;
   endsAt: string;
+  /**
+   * `endsAt` came from Claude telling us when the allowance returns, rather
+   * than from `startedAt` plus the configured window length.
+   */
+  endsAtObserved: boolean;
   inputTokens: number;
   outputTokens: number;
   cacheCreationTokens: number;
