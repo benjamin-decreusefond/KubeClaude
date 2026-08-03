@@ -85,10 +85,11 @@ test('deleting a goal removes it and everything it ran', async ({ page, consoleE
   await page.getByRole('heading', { name: NAME }).click();
 
   await page.getByRole('button', { name: 'Pause' }).click();
-  await page.getByRole('button', { name: 'Settings' }).click();
 
+  // In the header next to Pause and Iterate, the way a prompt carries its own
+  // Delete — not at the foot of the collapsed Settings card it used to hide in.
   page.once('dialog', (dialog) => void dialog.accept());
-  await page.getByRole('button', { name: 'Delete goal' }).click();
+  await page.getByRole('button', { name: 'Delete', exact: true }).click();
 
   await expect(page).toHaveURL(/\/goals$/);
   await expect(page.getByRole('heading', { name: NAME })).toHaveCount(0);
