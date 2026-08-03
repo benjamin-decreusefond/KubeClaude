@@ -21,7 +21,9 @@ export type TriggerType =
   | 'interval'
   | 'session_reset'
   | 'weekly_reset'
-  | 'quota_available';
+  | 'quota_available'
+  /** Fired by an inbound POST from outside KubeClaude — Asana, Jira, GitHub, or anything else that can call a URL. */
+  | 'webhook';
 
 export type WindowKind = 'session' | 'weekly';
 
@@ -104,6 +106,8 @@ export interface Prompt {
    * `{"reviewer": {"description": "…", "prompt": "…"}}`.
    */
   agentsJson: string | null;
+  /** Shared agents attached to this prompt. On a name collision, agentsJson wins — same precedence as MCP. */
+  agentIds: string[];
   /**
    * Which built-in tools exist at all (`--tools`). Null leaves the CLI's full
    * set; an empty list disables every built-in tool; a list keeps only those.
@@ -154,8 +158,22 @@ export interface Trigger {
   cronExpression: string | null;
   timezone: string;
   config: TriggerConfig;
+  /** webhook triggers only: the unguessable token embedded in the inbound URL. */
+  webhookToken: string | null;
   lastFiredAt: string | null;
   nextFireAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A reusable subagent definition, attached to any prompt's --agents by name. */
+export interface AgentDefinition {
+  id: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+  /** A bare { description, prompt, ... } definition, or a full { name: {...} } document, as JSON text. */
+  config: string;
   createdAt: string;
   updatedAt: string;
 }
