@@ -150,15 +150,15 @@ async function execute(run: Run): Promise<void> {
   const controller = new AbortController();
   inFlight.set(run.id, controller);
 
-  const startedAt = new Date();
-  runs.updateRun(run.id, { status: 'running', startedAt: startedAt.toISOString() });
-  emitUpdate(run.id);
-
-  // Counts the run against the window it starts in.
-  openWindows(startedAt);
-  const settings = getSettings();
-
   try {
+    const startedAt = new Date();
+    runs.updateRun(run.id, { status: 'running', startedAt: startedAt.toISOString() });
+    emitUpdate(run.id);
+
+    // Counts the run against the window it starts in.
+    openWindows(startedAt);
+    const settings = getSettings();
+
     const result = await runClaude({
       prompt,
       runId: run.id,
