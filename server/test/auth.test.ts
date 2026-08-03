@@ -12,8 +12,15 @@ process.env.KUBECLAUDE_AUTH_TOKEN = 'static-token-for-machines';
 const { migrate, db } = await import('../src/db.js');
 const authStore = await import('../src/store/auth.js');
 const { hashSecret, verifySecret, randomToken } = await import('../src/auth/secrets.js');
-const { authenticate, isLocalAddress, isPublicPath, localBypassApplies, normaliseMethod, readCookie } =
-  await import('../src/auth/guard.js');
+const {
+  authenticate,
+  forwardedByProxy,
+  isLocalAddress,
+  isPublicPath,
+  localBypassApplies,
+  normaliseMethod,
+  readCookie,
+} = await import('../src/auth/guard.js');
 
 before(() => migrate());
 after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
@@ -209,6 +216,38 @@ test('the local bypass only applies when it is turned on', async () => {
   // With no auth at all there is nothing to bypass.
   authStore.updateAuthConfig({ method: 'none' });
   assert.equal(localBypassApplies(request({ ip: '192.168.1.20' })), false);
+});
+
+/**
+ * The failure this prevents is the one that actually happens: an instance put
+ * behind an ingress with the bypass on. `request.ip` is then the ingress pod,
+ * which is on a private address, so every request in the world reads as local.
+ */
+test('the local bypass is refused when a proxy is in the path and TRUST_PROXY is off', async () => {
+  await authStore.setPassword('a-good-password');
+  authStore.updateAuthConfig({ requirement: 'local_bypass' });
+
+  // The ingress pod's address, which is exactly what a private-range check
+  // would call "my LAN".
+  const ip = '10.42.0.7';
+  assert.equal(localBypassApplies(request({ ip })), true, 'a genuine LAN client still gets in');
+
+  for (const header of ['x-forwarded-for', 'x-forwarded-host', 'x-real-ip', 'forwarded', 'cf-connecting-ip']) {
+    assert.equal(
+      localBypassApplies(request({ ip, headers: { [header]: 'anything' } })),
+      false,
+      `${header} means the address is a hop, not the caller`,
+    );
+  }
+
+  // An empty header is not evidence of anything.
+  assert.equal(localBypassApplies(request({ ip, headers: { 'x-forwarded-for': '  ' } })), true);
+});
+
+test('forwarding headers are only read as proxy evidence while TRUST_PROXY is off', () => {
+  // config.trustProxy is false in this process, which is the default.
+  assert.equal(forwardedByProxy(request({ headers: { 'x-forwarded-for': '203.0.113.9' } })), true);
+  assert.equal(forwardedByProxy(request({})), false);
 });
 
 test('private addresses are recognised and public ones are not', () => {

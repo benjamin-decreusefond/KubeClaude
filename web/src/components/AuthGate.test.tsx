@@ -33,6 +33,7 @@ function state(overrides: Partial<AuthState> = {}): AuthState {
     locked: false,
     staticTokenRequired: false,
     local: false,
+    behindProxy: false,
     ...overrides,
   };
 }
@@ -126,6 +127,28 @@ describe('first run', () => {
 
     await waitFor(() =>
       expect(mocked.setupAuth.mock.calls[0]?.[0]).toMatchObject({ requirement: 'local_bypass' }),
+    );
+  });
+
+  test('the local bypass is not offered when the request came through a proxy', async () => {
+    mocked.authState.mockResolvedValue(
+      state({ setupRequired: true, authenticated: false, username: null, behindProxy: true }),
+    );
+    mocked.setupAuth.mockResolvedValue({ ...state(), apiKey: 'k' });
+    renderGate();
+    await screen.findByText('Set a password');
+
+    // Behind a proxy every request looks local, so the option would mean "let
+    // the internet in". It is explained rather than offered and refused.
+    expect(screen.queryByRole('checkbox')).toBeNull();
+    expect(screen.getAllByText(/TRUST_PROXY/).length).toBeGreaterThan(0);
+
+    await userEvent.type(screen.getByLabelText('Password'), 'a-good-password');
+    await userEvent.type(screen.getByLabelText('Confirm password'), 'a-good-password');
+    await userEvent.click(screen.getByRole('button', { name: 'Set password' }));
+
+    await waitFor(() =>
+      expect(mocked.setupAuth.mock.calls[0]?.[0]).toMatchObject({ requirement: 'always' }),
     );
   });
 });

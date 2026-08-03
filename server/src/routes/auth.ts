@@ -5,6 +5,7 @@ import {
   authenticate,
   clearSessionCookie,
   effectiveMethod,
+  forwardedByProxy,
   isLocalAddress,
   isSecureRequest,
   localBypassApplies,
@@ -102,6 +103,7 @@ function signedInState(request: FastifyRequest): AuthState {
     locked,
     staticTokenRequired: false,
     local: isLocalAddress(request.ip),
+    behindProxy: forwardedByProxy(request),
   };
 }
 
@@ -124,6 +126,7 @@ async function stateFor(request: FastifyRequest): Promise<AuthState> {
     // credential among several and nothing special has to be said about it.
     staticTokenRequired: Boolean(config.authToken) && !stored.configured,
     local,
+    behindProxy: forwardedByProxy(request),
   };
 }
 
@@ -215,7 +218,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   });
 
   /** Guarded from here down: the hook has already let the caller through. */
-  app.get('/api/auth/config', async () => {
+  app.get('/api/auth/config', async (request) => {
     const { method, locked } = effectiveMethod();
     return {
       ...authStore.getAuthConfig(),
@@ -224,6 +227,9 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       hasApiKey: authStore.hasApiKey(),
       staticTokenConfigured: Boolean(config.authToken),
       activeSessions: authStore.countSessions(),
+      // So the page can say that the local-network switch is not doing what it
+      // looks like it is doing, rather than leaving it to be discovered.
+      behindProxy: forwardedByProxy(request),
     };
   });
 

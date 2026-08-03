@@ -118,17 +118,28 @@ export function SecuritySettings() {
       )}
 
       {config.method !== 'none' && (
-        <Checkbox
-          checked={config.requirement === 'local_bypass'}
-          onChange={(value) =>
-            void run(
-              () => api.updateAuthConfig({ requirement: value ? 'local_bypass' : 'always' }),
-              value ? 'The local network no longer has to sign in.' : 'Everyone has to sign in.',
-            )
-          }
-          label="Skip authentication on the local network"
-          hint="Requests from 10./172.16-31./192.168./loopback get in without signing in. Convenient at home; wrong the moment this port is reachable from outside — and behind a reverse proxy every request looks local unless the proxy sets the forwarded headers."
-        />
+        <>
+          <Checkbox
+            checked={config.requirement === 'local_bypass'}
+            onChange={(value) =>
+              void run(
+                () => api.updateAuthConfig({ requirement: value ? 'local_bypass' : 'always' }),
+                value ? 'The local network no longer has to sign in.' : 'Everyone has to sign in.',
+              )
+            }
+            label="Skip authentication on the local network"
+            hint="Requests from 10./172.16-31./192.168./loopback get in without signing in. Convenient at home; wrong the moment this port is reachable from outside."
+          />
+          {config.behindProxy && (
+            <Banner tone={config.requirement === 'local_bypass' ? 'critical' : undefined}>
+              Requests are reaching this instance through a proxy and <code>TRUST_PROXY</code> is off, so the
+              address KubeClaude sees is the proxy&apos;s, not the caller&apos;s.{' '}
+              {config.requirement === 'local_bypass'
+                ? 'The bypass above is therefore refused for every request — otherwise anyone who can reach that proxy would get in without signing in. Turn it off, or set TRUST_PROXY=true once the proxy overwrites X-Forwarded-For rather than appending to it.'
+                : 'The bypass above would be refused for every request while that is the case. Set TRUST_PROXY=true first, and only once the proxy overwrites X-Forwarded-For rather than appending to it.'}
+            </Banner>
+          )}
+        </>
       )}
 
       {(config.method === 'forms' || config.method === 'basic') && (

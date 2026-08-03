@@ -28,6 +28,25 @@ test('a spoofed X-Forwarded-For does not grant the local-network bypass unless T
     });
 
     assert.equal(spoofed.statusCode, 401, 'a forged X-Forwarded-For must not pass as local');
+
+    // The same header read the other way round, which is the failure that
+    // actually happens: behind an ingress the socket peer *is* private, so a
+    // plain private-range check would wave the whole internet through. The
+    // forwarded header is the evidence that the address is a hop, not a caller.
+    const direct = await kube.app.inject({
+      method: 'GET',
+      url: '/api/status',
+      remoteAddress: '10.42.0.7',
+    });
+    assert.equal(direct.statusCode, 200, 'a client actually on the LAN still gets the bypass');
+
+    const viaIngress = await kube.app.inject({
+      method: 'GET',
+      url: '/api/status',
+      remoteAddress: '10.42.0.7',
+      headers: { 'x-forwarded-for': '203.0.113.9' },
+    });
+    assert.equal(viaIngress.statusCode, 401, "a proxied request must not inherit the proxy's locality");
   } finally {
     await kube.close();
   }
