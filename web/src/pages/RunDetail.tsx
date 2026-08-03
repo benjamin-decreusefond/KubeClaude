@@ -148,7 +148,7 @@ export function RunDetail() {
               Cancel
             </button>
           )}
-          {run.status === 'rate_limited' && (
+          {(run.status === 'rate_limited' || run.status === 'capped') && (
             <button
               className="primary"
               disabled={busy}
@@ -174,6 +174,20 @@ export function RunDetail() {
               : run.completed
                 ? 'No resume is scheduled: the task had already been carried to the end.'
                 : 'No automatic resume is scheduled. Use “Resume now” to continue it by hand.'}
+          </div>
+        </Banner>
+      )}
+
+      {run.status === 'capped' && (
+        <Banner tone="warning">
+          <strong>Stopped by a KubeClaude limit, not by a failure</strong>
+          <div className="stat-note" style={{ marginTop: 4, whiteSpace: 'pre-wrap' }}>
+            {run.error ?? 'A ceiling configured in KubeClaude stopped this run.'}
+          </div>
+          <div className="stat-note" style={{ marginTop: 4 }}>
+            {run.completionReason === 'token-cap'
+              ? 'Resuming starts again against the same ceiling, so raise it first — otherwise the run will stop at the same place and spend the budget twice.'
+              : 'The Claude session is still there: “Resume now” continues it from where it stopped, without repeating the turns already spent.'}
           </div>
         </Banner>
       )}

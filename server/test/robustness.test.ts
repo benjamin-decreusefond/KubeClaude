@@ -363,14 +363,16 @@ test('running out of turns says which ceiling was hit, not just "failed"', async
   const run = enqueueRun({ promptId: prompt.id, triggerType: 'manual' })!;
 
   try {
-    await waitFor(() => runStore.getRun(run.id)?.status === 'failed');
+    await waitFor(() => runStore.getRun(run.id)?.status === 'capped');
   } finally {
     delete process.env.FAKE_CLAUDE_MODE;
   }
 
   const finished = runStore.getRun(run.id)!;
   // The distinction that matters: interrupted by a ceiling, not defeated by the
-  // task. Whoever reads this needs to know there is a knob, and which one.
+  // task. Whoever reads this needs to know there is a knob, and which one — and
+  // the status carries that too, so a capped run is not filed under failures.
+  assert.notEqual(finished.status, 'failed');
   assert.equal(finished.completionReason, 'turn-cap');
   assert.equal(finished.completed, false);
   assert.match(finished.error ?? '', /turn cap of 30/);

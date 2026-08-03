@@ -7,7 +7,14 @@ export type RunStatus =
   | 'timeout'
   | 'skipped'
   /** Stopped because the Claude quota ran out; eligible for automatic resume. */
-  | 'rate_limited';
+  | 'rate_limited'
+  /**
+   * Stopped by one of KubeClaude's own ceilings — the turn cap or the per-run
+   * token cap — rather than by anything wrong with the task. Kept apart from
+   * `failed` because the two call for different things: a failure is a problem
+   * to debug, and this is a dial to turn. `completionReason` says which one.
+   */
+  | 'capped';
 
 export type TriggerType =
   | 'cron'

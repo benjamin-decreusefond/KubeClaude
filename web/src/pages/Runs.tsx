@@ -11,6 +11,7 @@ const FILTERS: Array<{ label: string; status?: RunStatus }> = [
   { label: 'Running', status: 'running' },
   { label: 'Queued', status: 'queued' },
   { label: 'Awaiting quota', status: 'rate_limited' },
+  { label: 'Limit reached', status: 'capped' },
   { label: 'Succeeded', status: 'succeeded' },
   { label: 'Failed', status: 'failed' },
 ];

@@ -76,6 +76,11 @@ last of your allowance.
 `--resume <session-id>` so the model keeps its full context. Human follow-ups work the
 same way, and both are threaded into one conversation view.
 
+A run stopped by one of KubeClaude's *own* ceilings — the turn cap or the per-run token
+cap — is marked `capped` for the same reason: the task did not fail, a dial was set too
+low. No sweep picks these up, since the same ceiling would stop the run in the same
+place; raise the limit and resume by hand. `completionReason` says which ceiling it was.
+
 **Completion detection.** Before resuming, KubeClaude asks whether the task was
 *already done* — because resuming finished work wastes exactly the tokens you were
 waiting for. Per prompt:

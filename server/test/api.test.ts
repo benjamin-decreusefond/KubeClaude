@@ -210,6 +210,43 @@ test('an invalid prompt is refused with the reason', async () => {
   assert.match(response.json<{ error: string }>().error, /Invalid prompt/);
 });
 
+test('a turn cap of zero is accepted, because zero is how a prompt opts out', async () => {
+  // The runner already treats 0 as "uncapped on purpose" and the editor tells
+  // you to type it, but the schema used to demand a positive number — so the
+  // documented escape hatch could not be set through the API at all.
+  const created = await kube.request({
+    method: 'POST',
+    url: '/api/prompts',
+    payload: { name: 'uncapped', prompt: 'run as long as it takes', maxTurns: 0 },
+  });
+  assert.equal(created.status, 201);
+  const { id } = created.json<{ id: string }>();
+
+  // Round-trips as 0 rather than collapsing into null, which would silently
+  // mean "inherit the default" — the opposite of what was asked for.
+  assert.equal(created.json<{ maxTurns: number | null }>().maxTurns, 0);
+
+  const patched = await kube.request({
+    method: 'PATCH',
+    url: `/api/prompts/${id}`,
+    payload: { maxTurns: 0 },
+  });
+  assert.equal(patched.status, 200);
+  assert.equal(patched.json<{ maxTurns: number | null }>().maxTurns, 0);
+
+  // Still a cap, not a free-for-all: negatives and the ceiling stay refused.
+  for (const maxTurns of [-1, 1001]) {
+    const refused = await kube.request({
+      method: 'POST',
+      url: '/api/prompts',
+      payload: { name: `bad-cap-${maxTurns}`, prompt: 'x', maxTurns },
+    });
+    assert.equal(refused.status, 400, `should refuse maxTurns ${maxTurns}`);
+  }
+
+  assert.equal((await kube.request({ method: 'DELETE', url: `/api/prompts/${id}` })).status, 204);
+});
+
 test('a duplicate prompt name is a conflict, not a crash', async () => {
   const response = await kube.request({
     method: 'POST',

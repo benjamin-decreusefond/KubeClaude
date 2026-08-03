@@ -100,6 +100,9 @@ const STATUS_TONE: Record<RunStatus, string> = {
   timeout: 'serious',
   skipped: '',
   rate_limited: 'warning',
+  // Not `critical`: a ceiling was reached, which is a setting to revisit rather
+  // than a fault to investigate.
+  capped: 'warning',
 };
 
 const STATUS_LABEL: Record<RunStatus, string> = {
@@ -111,6 +114,7 @@ const STATUS_LABEL: Record<RunStatus, string> = {
   timeout: 'Timed out',
   skipped: 'Skipped',
   rate_limited: 'Quota reached',
+  capped: 'Limit reached',
 };
 
 /** Status always ships as a dot plus a word — never colour alone. */

@@ -227,10 +227,11 @@ async function execute(run: Run): Promise<void> {
       // marked finished-not-completed and left for a human to widen or narrow.
       runs.updateRun(run.id, {
         ...common,
-        status: 'failed',
+        status: 'capped',
         error:
-          `Stopped at the per-run ceiling of ${settings.runTokenCap} tokens ` +
-          `(${result.weighedTokens} spent). Raise it in Settings or narrow the prompt.`,
+          `Stopped at KubeClaude's per-run ceiling of ${settings.runTokenCap} tokens ` +
+          `(${result.weighedTokens} spent). Nothing went wrong with the task: raise ` +
+          'the ceiling in Settings, or narrow the prompt.',
         completed: false,
         completionReason: 'token-cap',
         autoResumePending: false,
@@ -243,9 +244,9 @@ async function execute(run: Run): Promise<void> {
       const cap = prompt.maxTurns ?? settings.defaultMaxTurns;
       runs.updateRun(run.id, {
         ...common,
-        status: 'failed',
+        status: 'capped',
         error:
-          `Stopped after ${result.numTurns ?? cap} turns, at the turn cap of ${cap}. ` +
+          `Stopped after ${result.numTurns ?? cap} turns, at KubeClaude's turn cap of ${cap}. ` +
           'The work is unfinished, not impossible: resume this run to carry on, or raise ' +
           'Max turns on the prompt (or the default in Settings).',
         completed: false,

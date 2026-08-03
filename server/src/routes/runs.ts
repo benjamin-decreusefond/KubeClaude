@@ -12,7 +12,17 @@ const followUpSchema = z.object({ message: z.string().min(1).max(100_000) });
 const listQuery = z.object({
   promptId: z.string().optional(),
   status: z
-    .enum(['queued', 'running', 'succeeded', 'failed', 'cancelled', 'timeout', 'skipped', 'rate_limited'])
+    .enum([
+      'queued',
+      'running',
+      'succeeded',
+      'failed',
+      'cancelled',
+      'timeout',
+      'skipped',
+      'rate_limited',
+      'capped',
+    ])
     .optional(),
   limit: z.coerce.number().int().min(1).max(500).default(50),
   offset: z.coerce.number().int().min(0).default(0),
@@ -97,7 +107,10 @@ export async function runRoutes(app: FastifyInstance): Promise<void> {
     return runStore.getRun(id);
   });
 
-  /** Manually resume a run that stopped on a quota limit, without waiting for the sweep. */
+  /**
+   * Manually resume a run that stopped short — on a quota limit, without waiting
+   * for the sweep, or on one of KubeClaude's own ceilings, which no sweep picks up.
+   */
   app.post('/api/runs/:id/resume', async (request, reply) => {
     const { id } = idParams.parse(request.params);
     const run = runStore.getRun(id);
