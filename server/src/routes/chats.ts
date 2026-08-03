@@ -111,6 +111,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
       appendSystemPrompt: source?.appendSystemPrompt ?? null,
       systemPrompt: source?.systemPrompt ?? null,
       agentsJson: source?.agentsJson ?? null,
+      agentIds: source?.agentIds ?? [],
       builtinTools: source?.builtinTools ?? null,
       settingSources: source?.settingSources ?? null,
       maxTurns: null,

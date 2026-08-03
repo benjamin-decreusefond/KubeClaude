@@ -362,6 +362,35 @@ const MIGRATIONS: Array<{ name: string; up: string }> = [
       ALTER TABLE usage_windows ADD COLUMN ends_at_observed INTEGER NOT NULL DEFAULT 0;
     `,
   },
+  {
+    name: '010_agents_and_webhooks',
+    up: `
+      /*
+       * Shared subagent definitions, the same idea as mcp_servers: defined once,
+       * attached to any prompt by name instead of retyping the same reviewer or
+       * tester into every prompt's inline --agents JSON.
+       */
+      CREATE TABLE agents (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        description TEXT NOT NULL DEFAULT '',
+        enabled INTEGER NOT NULL DEFAULT 1,
+        /* A bare { description, prompt, ... } definition, or a full { name: {...} } document. */
+        config TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      ALTER TABLE prompts ADD COLUMN agent_ids TEXT NOT NULL DEFAULT '[]';
+
+      /*
+       * A webhook trigger has no cron or interval — it fires on an inbound POST
+       * carrying this token in the URL. Generated once at creation, and the only
+       * credential a third-party caller (Asana, Jira, GitHub, ...) presents.
+       */
+      ALTER TABLE triggers ADD COLUMN webhook_token TEXT;
+    `,
+  },
 ];
 
 export function migrate(): void {

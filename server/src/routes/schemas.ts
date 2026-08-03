@@ -134,6 +134,7 @@ export const promptCreateSchema = z.object({
   appendSystemPrompt: z.string().nullable().default(null),
   systemPrompt: z.string().max(100_000).nullable().default(null),
   agentsJson: jsonText('Agents definition').default(null),
+  agentIds: z.array(z.string()).default([]),
   builtinTools: builtinToolsSchema.default(null),
   settingSources: settingSourcesSchema.default(null),
   maxTurns: maxTurnsSchema,
@@ -197,6 +198,7 @@ export const triggerTypeSchema = z.enum([
   'session_reset',
   'weekly_reset',
   'quota_available',
+  'webhook',
 ]);
 
 export const triggerCreateSchema = z
@@ -292,6 +294,7 @@ const goalPromptSchema = z.object({
   env: envRecord.default({}),
   systemPrompt: z.string().max(100_000).nullable().default(null),
   agentsJson: jsonText('Agents definition').default(null),
+  agentIds: z.array(z.string()).default([]),
   builtinTools: builtinToolsSchema.default(null),
   settingSources: settingSourcesSchema.default(null),
   maxTurns: maxTurnsSchema,

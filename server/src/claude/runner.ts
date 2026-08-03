@@ -6,6 +6,7 @@ import path from 'node:path';
 import { claudeCredentials, config, forwardedEnvPrefixes } from '../config.js';
 import { describeCapabilities } from './environment.js';
 import { DEFAULT_GIT_IDENTITY, prepareRepository, writeGitConfig, type GitIdentity } from './git.js';
+import { buildAgentsDocument } from '../store/agents.js';
 import { buildMcpDocument } from '../store/mcp.js';
 import { weighTokens } from '../store/usage.js';
 import type { BudgetBasis, Effort, ModelUsage, Prompt, UsageTotals } from '../types.js';
@@ -227,7 +228,10 @@ async function prepare(options: RunnerOptions): Promise<PreparedInvocation> {
   // Replaces the CLI's own system prompt. The parts assembled above are still
   // appended after it, so the briefing and the completion marker survive.
   if (prompt.systemPrompt?.trim()) args.push('--system-prompt', prompt.systemPrompt.trim());
-  if (prompt.agentsJson?.trim()) args.push('--agents', prompt.agentsJson.trim());
+  // Shared agents attached to this prompt, plus any inline --agents JSON,
+  // merged the same way the MCP config below is: shared first, inline wins.
+  const agentsDocument = buildAgentsDocument(prompt.agentIds, prompt.agentsJson);
+  if (agentsDocument) args.push('--agents', agentsDocument);
 
   // Which built-in tools exist at all, as opposed to which may run unattended.
   // An empty list is meaningful — it hands the CLI no built-in tools — so this

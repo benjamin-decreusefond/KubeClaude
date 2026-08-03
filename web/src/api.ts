@@ -1,4 +1,5 @@
 import type {
+  AgentDefinition,
   AppError,
   AuthConfig,
   AuthState,
@@ -224,6 +225,18 @@ export const api = {
     request<{ document: string | null }>('/api/mcp-servers/preview', {
       method: 'POST',
       body: JSON.stringify({ serverIds, inlineConfig }),
+    }),
+
+  agents: () => request<AgentDefinition[]>('/api/agents'),
+  createAgent: (input: Partial<AgentDefinition>) =>
+    request<AgentDefinition>('/api/agents', { method: 'POST', body: JSON.stringify(input) }),
+  updateAgent: (id: string, patch: Partial<AgentDefinition>) =>
+    request<AgentDefinition>(`/api/agents/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  deleteAgent: (id: string) => request<void>(`/api/agents/${id}`, { method: 'DELETE' }),
+  previewAgents: (agentIds: string[], inlineConfig: string | null) =>
+    request<{ document: string | null }>('/api/agents/preview', {
+      method: 'POST',
+      body: JSON.stringify({ agentIds, inlineConfig }),
     }),
 };
 

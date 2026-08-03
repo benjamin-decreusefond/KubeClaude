@@ -10,6 +10,7 @@ interface TriggerRow {
   cron_expression: string | null;
   timezone: string;
   config: string;
+  webhook_token: string | null;
   last_fired_at: string | null;
   next_fire_at: string | null;
   created_at: string;
@@ -25,6 +26,7 @@ function toTrigger(row: TriggerRow): Trigger {
     cronExpression: row.cron_expression,
     timezone: row.timezone,
     config: jsonFromDb<TriggerConfig>(row.config, {}),
+    webhookToken: row.webhook_token,
     lastFiredAt: row.last_fired_at,
     nextFireAt: row.next_fire_at,
     createdAt: row.created_at,
@@ -32,7 +34,10 @@ function toTrigger(row: TriggerRow): Trigger {
   };
 }
 
-export type TriggerInput = Omit<Trigger, 'id' | 'createdAt' | 'updatedAt' | 'lastFiredAt' | 'nextFireAt'>;
+export type TriggerInput = Omit<
+  Trigger,
+  'id' | 'createdAt' | 'updatedAt' | 'lastFiredAt' | 'nextFireAt' | 'webhookToken'
+>;
 
 export function listTriggers(promptId?: string): Trigger[] {
   const rows = promptId
@@ -63,9 +68,12 @@ export function getTrigger(id: string): Trigger | null {
 export function createTrigger(input: TriggerInput): Trigger {
   const now = new Date().toISOString();
   const id = randomUUID();
+  // Generated here rather than accepted from the caller: it is a credential,
+  // not a preference, and only this trigger's webhook route ever compares it.
+  const webhookToken = input.type === 'webhook' ? randomUUID().replace(/-/g, '') : null;
   db.prepare(
-    `INSERT INTO triggers (id, prompt_id, type, enabled, cron_expression, timezone, config, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO triggers (id, prompt_id, type, enabled, cron_expression, timezone, config, webhook_token, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
     input.promptId,
@@ -74,6 +82,7 @@ export function createTrigger(input: TriggerInput): Trigger {
     input.cronExpression,
     input.timezone,
     JSON.stringify(input.config),
+    webhookToken,
     now,
     now,
   );

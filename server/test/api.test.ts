@@ -306,6 +306,47 @@ test('triggers are created under their prompt and validated by type', async () =
   assert.equal((await kube.request({ method: 'DELETE', url: `/api/triggers/${trigger.id}` })).status, 204);
 });
 
+test('a webhook trigger gets a token, and only that token fires it, without auth', async () => {
+  // Its own prompt: firing the webhook queues a real run, and sharing the
+  // suite's `promptId` would inflate the run counts later tests assert on.
+  const ownPrompt = await kube.request({
+    method: 'POST',
+    url: '/api/prompts',
+    payload: { name: 'webhook-target', prompt: 'handle the webhook' },
+  });
+  const ownPromptId = ownPrompt.json<{ id: string }>().id;
+
+  const created = await kube.request({
+    method: 'POST',
+    url: `/api/prompts/${ownPromptId}/triggers`,
+    payload: { type: 'webhook' },
+  });
+  assert.equal(created.status, 201);
+  const trigger = created.json<{ id: string; type: string; webhookToken: string }>();
+  assert.equal(trigger.type, 'webhook');
+  assert.ok(trigger.webhookToken && trigger.webhookToken.length > 10);
+
+  // A wrong token behaves exactly like a missing trigger — nothing here says
+  // which one it is.
+  const bad = await kube.request({
+    method: 'POST',
+    url: `/api/webhooks/${trigger.id}/not-the-real-token`,
+    payload: {},
+  });
+  assert.equal(bad.status, 404);
+
+  const good = await kube.request({
+    method: 'POST',
+    url: `/api/webhooks/${trigger.id}/${trigger.webhookToken}`,
+    payload: { source: 'asana', event: 'task.completed' },
+  });
+  assert.equal(good.status, 202);
+  assert.equal(good.json<{ accepted: boolean }>().accepted, true);
+
+  assert.equal((await kube.request({ method: 'DELETE', url: `/api/triggers/${trigger.id}` })).status, 204);
+  assert.equal((await kube.request({ method: 'DELETE', url: `/api/prompts/${ownPromptId}` })).status, 204);
+});
+
 test('a trigger cannot be edited into a state where it would never fire', async () => {
   const created = await kube.request({
     method: 'POST',
@@ -585,6 +626,57 @@ test('an MCP connection is stored and rendered into a .mcp.json document', async
   assert.equal(bad.status, 400);
 
   assert.equal((await kube.request({ method: 'DELETE', url: `/api/mcp-servers/${server.id}` })).status, 204);
+});
+
+// --------------------------------------------------------------------------
+// Agents
+// --------------------------------------------------------------------------
+
+test('a shared agent is stored, attached to a prompt, and rendered into --agents', async () => {
+  const created = await kube.request({
+    method: 'POST',
+    url: '/api/agents',
+    payload: {
+      name: 'reviewer',
+      description: 'Reviews a diff',
+      config: JSON.stringify({ description: 'Reviews a diff', prompt: 'You are a reviewer.' }),
+    },
+  });
+  assert.equal(created.status, 201);
+  const agent = created.json<{ id: string; name: string }>();
+
+  // A second agent with the same name collides with the DB's UNIQUE index.
+  const dupe = await kube.request({
+    method: 'POST',
+    url: '/api/agents',
+    payload: { name: 'reviewer', description: '', config: JSON.stringify({ prompt: 'x' }) },
+  });
+  assert.equal(dupe.status, 409);
+
+  const preview = await kube.request({
+    method: 'POST',
+    url: '/api/agents/preview',
+    payload: { agentIds: [agent.id], inlineConfig: null },
+  });
+  assert.equal(preview.status, 200);
+  const document = JSON.parse(preview.json<{ document: string }>().document);
+  assert.equal(document.reviewer.prompt, 'You are a reviewer.');
+
+  // Attached to a prompt the same way a shared MCP connection is.
+  const attached = await kube.request({
+    method: 'PATCH',
+    url: `/api/prompts/${promptId}`,
+    payload: { agentIds: [agent.id] },
+  });
+  assert.equal(attached.status, 200);
+  assert.deepEqual(attached.json<{ agentIds: string[] }>().agentIds, [agent.id]);
+
+  assert.equal((await kube.request({ method: 'DELETE', url: `/api/agents/${agent.id}` })).status, 204);
+
+  // Deleting the agent drops it from the prompt that held it, rather than
+  // leaving a dangling reference.
+  const reloaded = await kube.request({ method: 'GET', url: `/api/prompts/${promptId}` });
+  assert.deepEqual(reloaded.json<{ agentIds: string[] }>().agentIds, []);
 });
 
 // --------------------------------------------------------------------------

@@ -10,7 +10,13 @@ export type RunStatus =
   /** Stopped by a KubeClaude ceiling (turn cap or per-run token cap), not by a fault. */
   | 'capped';
 
-export type TriggerType = 'cron' | 'interval' | 'session_reset' | 'weekly_reset' | 'quota_available';
+export type TriggerType =
+  | 'cron'
+  | 'interval'
+  | 'session_reset'
+  | 'weekly_reset'
+  | 'quota_available'
+  | 'webhook';
 
 export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'auto' | 'bypassPermissions';
 
@@ -183,6 +189,8 @@ export interface Prompt {
   systemPrompt: string | null;
   /** Custom subagents, as the JSON object `--agents` takes. */
   agentsJson: string | null;
+  /** Shared agents attached to this prompt. On a name collision, agentsJson wins. */
+  agentIds: string[];
   /** Which built-in tools exist: null the CLI's full set, [] none, else only these. */
   builtinTools: string[] | null;
   /** Settings files the CLI reads: `none`, or a subset of user, project, local. */
@@ -226,8 +234,20 @@ export interface Trigger {
   cronExpression: string | null;
   timezone: string;
   config: TriggerConfig;
+  /** webhook triggers only: the token embedded in the inbound URL. */
+  webhookToken: string | null;
   lastFiredAt: string | null;
   nextFireAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgentDefinition {
+  id: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+  config: string;
   createdAt: string;
   updatedAt: string;
 }

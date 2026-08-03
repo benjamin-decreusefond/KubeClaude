@@ -21,7 +21,11 @@ const PUBLIC_API_PATHS = new Set([
 export function isPublicPath(url: string): boolean {
   const path = url.split('?')[0] ?? '';
   if (!path.startsWith('/api/')) return true;
-  return PUBLIC_API_PATHS.has(path);
+  if (PUBLIC_API_PATHS.has(path)) return true;
+  // The caller here is a third-party service (Asana, Jira, GitHub, ...), not a
+  // logged-in user — the unguessable token in the URL is its own credential,
+  // checked by the route itself in constant time.
+  return /^\/api\/webhooks\/[^/]+\/[^/]+$/.test(path);
 }
 
 /**

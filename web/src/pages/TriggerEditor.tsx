@@ -12,6 +12,8 @@ const TRIGGER_HELP: Record<TriggerType, string> = {
   weekly_reset: 'Runs once per weekly window, as soon as the week rolls over.',
   quota_available:
     'Runs when a configured share of the token budget is free again. Needs a token budget in Settings; without one it behaves like the 5-hour trigger.',
+  webhook:
+    'Runs when something outside KubeClaude calls this trigger’s URL — Asana, Jira, GitHub, or anything else that can send a POST. The payload is appended to the prompt.',
 };
 
 const CRON_PRESETS: Array<{ label: string; expression: string }> = [
@@ -68,6 +70,15 @@ export function TriggerList({
                   )}
                 </td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  {trigger.type === 'webhook' && trigger.webhookToken && (
+                    <button
+                      className="ghost small"
+                      type="button"
+                      onClick={() => void copyWebhookUrl(trigger.id, trigger.webhookToken!)}
+                    >
+                      Copy URL
+                    </button>
+                  )}
                   <button className="ghost small" type="button" onClick={() => setEditing(trigger)}>
                     Edit
                   </button>
@@ -122,6 +133,8 @@ function describe(trigger: Trigger): string {
         : 'As soon as each 5h window opens';
     case 'weekly_reset':
       return 'As soon as each weekly window opens';
+    case 'webhook':
+      return 'Fires on an inbound POST to its URL';
     case 'quota_available': {
       const parts: string[] = [];
       if (trigger.config.minSessionPctAvailable !== undefined) {
@@ -226,8 +239,22 @@ function TriggerModal({
           <option value="weekly_reset">When a new week opens</option>
           <option value="cron">On a cron schedule</option>
           <option value="interval">Every N minutes</option>
+          <option value="webhook">On an inbound webhook</option>
         </select>
       </Field>
+
+      {type === 'webhook' && (
+        <Field
+          label="Webhook URL"
+          hint="Register this URL in Asana, Jira, GitHub, or anything else that can send a webhook. The token in the URL is the only credential — treat it like a password."
+        >
+          {trigger?.webhookToken ? (
+            <WebhookUrlField trigger={trigger} />
+          ) : (
+            <p className="stat-note">The URL is generated once you save — it needs the trigger’s id first.</p>
+          )}
+        </Field>
+      )}
 
       {type === 'cron' && (
         <>
@@ -330,5 +357,35 @@ function TriggerModal({
         />
       </Field>
     </Modal>
+  );
+}
+
+function webhookUrl(triggerId: string, token: string): string {
+  return `${window.location.origin}/api/webhooks/${triggerId}/${token}`;
+}
+
+async function copyWebhookUrl(triggerId: string, token: string): Promise<void> {
+  await navigator.clipboard.writeText(webhookUrl(triggerId, token));
+}
+
+function WebhookUrlField({ trigger }: { trigger: Trigger }) {
+  const [copied, setCopied] = useState(false);
+  const url = webhookUrl(trigger.id, trigger.webhookToken!);
+  return (
+    <div className="row" style={{ gap: 8 }}>
+      <input type="text" value={url} readOnly onFocus={(event) => event.currentTarget.select()} />
+      <button
+        className="ghost small"
+        type="button"
+        onClick={() => {
+          void copyWebhookUrl(trigger.id, trigger.webhookToken!).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          });
+        }}
+      >
+        {copied ? 'Copied' : 'Copy'}
+      </button>
+    </div>
   );
 }

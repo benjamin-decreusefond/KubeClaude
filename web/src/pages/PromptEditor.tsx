@@ -6,7 +6,7 @@ import { Badge, Banner, Card, Checkbox, Field, StatusBadge } from '../components
 import { formatRelative, formatTokens, triggerLabel } from '../format';
 import { usePolled } from '../hooks';
 import { TriggerList } from './TriggerEditor';
-import type { Capabilities, McpServer, ModelOption, Prompt, Settings, ToolPreset } from '../types';
+import type { AgentDefinition, Capabilities, McpServer, ModelOption, Prompt, Settings, ToolPreset } from '../types';
 
 // This editor only ever handles scheduled prompts; chats are edited by talking
 // to them, so kind and title are not part of the form.
@@ -34,6 +34,7 @@ const EMPTY_DRAFT: Draft = {
   appendSystemPrompt: null,
   systemPrompt: null,
   agentsJson: null,
+  agentIds: [],
   builtinTools: null,
   settingSources: null,
   maxTurns: null,
@@ -86,6 +87,7 @@ export function PromptEditor() {
   );
   const { data: modelData } = usePolled<{ models: ModelOption[] }>(() => api.models(), 0);
   const { data: mcpServers } = usePolled<McpServer[]>(() => api.mcpServers(), 0);
+  const { data: agents } = usePolled<AgentDefinition[]>(() => api.agents(), 0);
   const { data: capabilities } = usePolled<Capabilities>(() => api.capabilities(), 0);
   const { data: settings } = usePolled<Settings>(() => api.settings(), 0);
   const { data: presetData } = usePolled<{ presets: ToolPreset[] }>(() => api.toolPresets(), 0);
@@ -436,6 +438,41 @@ export function PromptEditor() {
                       </>
                     }
                     hint={server.description}
+                  />
+                ))}
+              </div>
+            )}
+          </Card>
+
+          <Card
+            title="Agents"
+            subtitle="Reusable subagents this prompt can delegate to, defined once and shared across prompts"
+          >
+            {(agents ?? []).length === 0 ? (
+              <p className="stat-note">
+                None registered yet. <Link to="/agents">Add an agent</Link> to give this prompt a reviewer,
+                tester, or anything else Claude may delegate to.
+              </p>
+            ) : (
+              <div>
+                {(agents ?? []).map((agent) => (
+                  <Checkbox
+                    key={agent.id}
+                    checked={draft.agentIds.includes(agent.id)}
+                    onChange={(checked) =>
+                      patch({
+                        agentIds: checked
+                          ? [...draft.agentIds, agent.id]
+                          : draft.agentIds.filter((value) => value !== agent.id),
+                      })
+                    }
+                    label={
+                      <>
+                        <code>{agent.name}</code>
+                        {!agent.enabled && ' (disabled)'}
+                      </>
+                    }
+                    hint={agent.description}
                   />
                 ))}
               </div>

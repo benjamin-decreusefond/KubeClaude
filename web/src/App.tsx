@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { api, getToken, setToken } from './api';
 import { usePolled, useTheme } from './hooks';
+import { Agents } from './pages/Agents';
 import { Chat } from './pages/Chat';
 import { Chats } from './pages/Chats';
 import { Dashboard } from './pages/Dashboard';
@@ -14,6 +15,7 @@ import { Prompts } from './pages/Prompts';
 import { RunDetail } from './pages/RunDetail';
 import { Runs } from './pages/Runs';
 import { SettingsPage } from './pages/Settings';
+import { BrandMark } from './components/BrandMark';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Modal, Field } from './components/primitives';
 import type { AuthState } from './types';
@@ -39,7 +41,7 @@ export function App({ auth, onAuthChanged }: { auth: AuthState; onAuthChanged: (
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-mark" aria-hidden>
-            KC
+            <BrandMark />
           </div>
           <div>
             <div className="brand-name">KubeClaude</div>
@@ -72,6 +74,7 @@ export function App({ auth, onAuthChanged }: { auth: AuthState; onAuthChanged: (
             )}
           </NavLink>
           <NavLink to="/mcp">MCP connections</NavLink>
+          <NavLink to="/agents">Agents</NavLink>
           <NavLink to="/errors">
             Errors
             {status && status.errorCount > 0 && <span className="nav-count">{status.errorCount}</span>}
@@ -154,6 +157,7 @@ export function App({ auth, onAuthChanged }: { auth: AuthState; onAuthChanged: (
             <Route path="/runs" element={<Runs />} />
             <Route path="/runs/:id" element={<RunDetail />} />
             <Route path="/mcp" element={<McpServers />} />
+            <Route path="/agents" element={<Agents />} />
             <Route path="/errors" element={<Errors />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />

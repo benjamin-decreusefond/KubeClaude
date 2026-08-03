@@ -5,6 +5,7 @@ import fastifyStatic from '@fastify/static';
 import { authenticate, isPublicPath, localBypassApplies } from './auth/guard.js';
 import { config } from './config.js';
 import { logger } from './logger.js';
+import { agentRoutes } from './routes/agents.js';
 import { authRoutes } from './routes/auth.js';
 import { chatRoutes } from './routes/chats.js';
 import { errorRoutes } from './routes/errors.js';
@@ -15,6 +16,7 @@ import { runRoutes } from './routes/runs.js';
 import { streamRoutes } from './routes/stream.js';
 import { systemRoutes } from './routes/system.js';
 import { triggerRoutes } from './routes/triggers.js';
+import { webhookRoutes } from './routes/webhooks.js';
 import { recordError } from './store/errors.js';
 
 /**
@@ -73,8 +75,10 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(systemRoutes);
   await app.register(promptRoutes);
   await app.register(triggerRoutes);
+  await app.register(webhookRoutes);
   await app.register(runRoutes);
   await app.register(mcpRoutes);
+  await app.register(agentRoutes);
   await app.register(chatRoutes);
   await app.register(errorRoutes);
   await app.register(goalRoutes);
