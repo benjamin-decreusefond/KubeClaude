@@ -110,6 +110,11 @@ export function GoalDetail() {
           >
             {running ? 'Iterating…' : 'Iterate now'}
           </button>
+          {/* Where a prompt keeps its own Delete. It used to sit at the foot of
+              the collapsed Settings card, which reads as not existing at all. */}
+          <button className="danger" disabled={busy} onClick={remove}>
+            Delete
+          </button>
         </div>
       </header>
 
@@ -337,13 +342,10 @@ export function GoalDetail() {
             label="Keep one session across iterations"
           />
 
-          <div className="row" style={{ justifyContent: 'space-between', marginTop: 18 }}>
+          <div className="row" style={{ marginTop: 18 }}>
             <span className="stat-note">
               Workspace: {goal.prompt?.workingDir ?? 'managed'} · created {formatDateTime(goal.createdAt)}
             </span>
-            <button className="ghost small" disabled={busy} onClick={remove}>
-              Delete goal
-            </button>
           </div>
         </Card>
       )}

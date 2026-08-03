@@ -41,6 +41,13 @@
   --accent: #2a78d6;
   --accent-contrast: #ffffff;
 
+  /*
+   * How wide the content column is allowed to get. Text is kept readable by the
+   * per-block `ch` caps further down, so this only has to stop tables and grids
+   * from stretching to a 34" monitor — it can be generous.
+   */
+  --shell-max: 1600px;
+
   --radius: 10px;
   --radius-sm: 6px;
   --shadow: 0 1px 2px rgba(11, 11, 11, 0.05), 0 8px 24px rgba(11, 11, 11, 0.04);
@@ -276,10 +283,17 @@ pre {
   padding: 0 8px;
 }
 
+/*
+ * The capped column has to be centred in the track it sits in. Without the auto
+ * margins it stays flush against the sidebar and every pixel past the cap piles
+ * up on the right, which reads as a broken layout rather than a deliberate
+ * measure — the wider the display, the worse it looks.
+ */
 .main {
   padding: 24px 28px 56px;
-  max-width: 1280px;
+  max-width: var(--shell-max);
   width: 100%;
+  margin-inline: auto;
 }
 
 .page-head {
