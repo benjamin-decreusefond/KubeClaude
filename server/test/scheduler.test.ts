@@ -82,6 +82,22 @@ test('a session_reset trigger fires once per 5h window', () => {
   assert.equal(shouldFire(armed, new Date('2026-07-27T15:00:01Z')).fire, true);
 });
 
+test('a session_reset trigger added while a window is already open waits for it, not fires early', () => {
+  const prompt = makePrompt('session-reset-late-add');
+  const opened = new Date('2026-07-27T10:00:00Z');
+  // Some other run already opened the window an hour ago, unrelated to this
+  // brand-new trigger — which has no lastFiredAt/nextFireAt of its own yet.
+  openWindows(opened);
+  const trigger = makeTrigger(prompt.id, { type: 'session_reset' });
+
+  const evaluatedLate = shouldFire(trigger, new Date('2026-07-27T11:00:00Z'));
+  assert.equal(evaluatedLate.fire, false);
+  assert.equal(evaluatedLate.nextFireAt, new Date('2026-07-27T15:00:00Z').toISOString());
+
+  // And it does fire once the window that was already running rolls over.
+  assert.equal(shouldFire(trigger, new Date('2026-07-27T15:00:01Z')).fire, true);
+});
+
 test('a cron trigger fires when its schedule comes due and only catches up once', () => {
   const prompt = makePrompt('cron-prompt');
   const trigger = makeTrigger(prompt.id, {

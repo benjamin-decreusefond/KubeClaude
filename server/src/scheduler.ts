@@ -185,10 +185,11 @@ function windowResetDecision(trigger: Trigger, now: Date, kind: WindowKind): Fir
   const windowEnd = active ? new Date(active.endsAt) : new Date(now.getTime() + windowDurationMs(kind));
   const nextFireAt = new Date(windowEnd.getTime() + delayMs).toISOString();
 
-  if (active && delayMs > 0) {
-    const readyAt = new Date(active.startedAt).getTime() + delayMs;
-    if (now.getTime() < readyAt) return { fire: false, nextFireAt: new Date(readyAt).toISOString() };
-  }
+  // `getActiveWindow` only returns a window whose `endsAt` is still in the
+  // future, so an active window always means "not yet" — regardless of a
+  // trigger evaluated for the first time (no `nextFireAt` of its own yet)
+  // while that window happens to already be open.
+  if (active) return { fire: false, nextFireAt };
 
   return { fire: true, nextFireAt };
 }
