@@ -172,15 +172,24 @@ export async function goalRoutes(app: FastifyInstance): Promise<void> {
 
     // Ticking the last objective by hand should end the goal the same way the
     // loop would, rather than leaving it to run one more pointless iteration.
-    const objectives = input.objectives ?? goal.objectives;
-    const withAdditions = input.addObjectives
-      ? [...objectives, ...goalStore.makeObjectives(input.addObjectives, objectives)]
-      : objectives;
+    //
+    // Only touch objectives when this request actually means to: an iteration
+    // review can tick one off between this handler reading `goal` and it
+    // writing back, and rewriting the array from that stale snapshot on an
+    // unrelated edit (renaming the goal, changing its cadence) would silently
+    // un-complete it.
+    let objectives: Goal['objectives'] | undefined;
+    if (input.objectives !== undefined || input.addObjectives !== undefined) {
+      const base = input.objectives ?? goal.objectives;
+      objectives = input.addObjectives
+        ? [...base, ...goalStore.makeObjectives(input.addObjectives, base)]
+        : base;
+    }
 
     const patch: Partial<Goal> = {
       name: input.name,
       description: input.description,
-      objectives: withAdditions,
+      objectives,
       status: input.status,
       cadenceMinutes: input.cadenceMinutes,
       maxIterations: input.maxIterations,

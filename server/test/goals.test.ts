@@ -16,7 +16,7 @@ process.env.FORWARD_ENV_PREFIXES = 'FAKE_';
 fs.chmodSync(process.env.CLAUDE_BIN, 0o755);
 
 const { migrate } = await import('../src/db.js');
-const { createPrompt } = await import('../src/store/prompts.js');
+const { createPrompt, updatePrompt } = await import('../src/store/prompts.js');
 const goalStore = await import('../src/store/goals.js');
 const runStore = await import('../src/store/runs.js');
 const { buildIterationPrompt, parseIterationReport, sweepGoals } = await import('../src/goals.js');
@@ -241,6 +241,23 @@ test('a paused goal is left alone', async () => {
 test('repeated failures pause the goal instead of looping on them', async () => {
   process.env.FAKE_CLAUDE_MODE = 'failure';
   const { goal, prompt } = makeGoal();
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await sweepGoals(new Date());
+    await settle(prompt.id);
+    await sweepGoals(new Date());
+  }
+
+  assert.equal(goalStore.getGoal(goal.id)?.status, 'paused');
+  assert.equal(runStore.countRuns({ promptId: prompt.id }), 3);
+});
+
+test('a goal stuck rate-limited with nothing to resume it pauses too, instead of looping forever', async () => {
+  process.env.FAKE_CLAUDE_MODE = 'ratelimit';
+  // Nothing is ever going to resume this run, so every hit is immediately the
+  // exhausted case rather than a pause waiting on auto-resume.
+  const { goal, prompt } = makeGoal();
+  updatePrompt(prompt.id, { autoResume: false });
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     await sweepGoals(new Date());
