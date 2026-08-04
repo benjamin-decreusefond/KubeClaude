@@ -19,8 +19,13 @@ const { migrate } = await import('../src/db.js');
 const { createPrompt, getPrompt, updatePrompt } = await import('../src/store/prompts.js');
 const goalStore = await import('../src/store/goals.js');
 const runStore = await import('../src/store/runs.js');
-const { buildIterationPrompt, iterationReportInstruction, parseIterationReport, sweepGoals } =
-  await import('../src/goals.js');
+const {
+  buildIterationPrompt,
+  clearFailureStreak,
+  iterationReportInstruction,
+  parseIterationReport,
+  sweepGoals,
+} = await import('../src/goals.js');
 import type { Goal, Prompt } from '../src/types.js';
 
 before(() => migrate());
@@ -358,4 +363,31 @@ test('the iteration is told to stop at a handover point, with the budget it has 
   const unconfigured = buildIterationPrompt(goal, [], { remainingPct: null } as never, now);
   assert.doesNotMatch(unconfigured, /## Budget/);
   assert.doesNotMatch(buildIterationPrompt(goal, []), /## Budget/);
+});
+
+test('resuming a paused goal clears the streak that paused it, instead of re-pausing on the next sweep', async () => {
+  process.env.FAKE_CLAUDE_MODE = 'failure';
+  const { goal, prompt } = makeGoal();
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await sweepGoals(new Date());
+    await settle(prompt.id);
+    await sweepGoals(new Date());
+  }
+  assert.equal(goalStore.getGoal(goal.id)?.status, 'paused');
+
+  // Resuming without drawing a line under the failures leaves the next sweep
+  // counting the very same three, which is what made the button look broken.
+  const resumed = goalStore.updateGoal(goal.id, { status: 'active' })!;
+  assert.equal(clearFailureStreak(resumed), true);
+
+  delete process.env.FAKE_CLAUDE_MODE;
+  process.env.FAKE_CLAUDE_RESULT = 'PROGRESS: Working again.\nDONE: none\nNEXT: carry on';
+  await sweepGoals(new Date());
+  assert.equal(goalStore.getGoal(goal.id)?.status, 'active');
+  assert.equal(runStore.countRuns({ promptId: prompt.id }), 4, 'it should have started another iteration');
+  await settle(prompt.id);
+
+  // A goal with nothing to forgive gets no line in its log for the click.
+  assert.equal(clearFailureStreak(goalStore.getGoal(goal.id)!), false);
 });

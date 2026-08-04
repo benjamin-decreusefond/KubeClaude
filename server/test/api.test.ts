@@ -787,6 +787,41 @@ test('a goal can be paused, resumed and iterated on demand', async () => {
   assert.deepEqual(view.iterations, []);
 });
 
+test('an objective can be removed, and the mission and cadence edited', async () => {
+  const before = await kube.request({ method: 'GET', url: `/api/goals/${goalId}` });
+  const objectives = before.json<{ objectives: Array<{ id: string }> }>().objectives;
+  assert.ok(objectives.length > 1);
+
+  const trimmed = await kube.request({
+    method: 'PATCH',
+    url: `/api/goals/${goalId}`,
+    payload: {
+      objectives: objectives.slice(1),
+      description: 'A new mission entirely',
+      cadenceMinutes: 120,
+    },
+  });
+  assert.equal(trimmed.status, 200);
+  const body = trimmed.json<{
+    objectives: Array<{ id: string }>;
+    description: string;
+    cadenceMinutes: number;
+  }>();
+  assert.equal(body.objectives.length, objectives.length - 1);
+  assert.equal(body.objectives.find((o) => o.id === objectives[0]!.id), undefined);
+  assert.equal(body.description, 'A new mission entirely');
+  assert.equal(body.cadenceMinutes, 120);
+
+  // Ids are never reused, so removing o1 does not make the next one o1 again.
+  const added = await kube.request({
+    method: 'PATCH',
+    url: `/api/goals/${goalId}`,
+    payload: { addObjectives: ['Something later'] },
+  });
+  const ids = added.json<{ objectives: Array<{ id: string }> }>().objectives.map((o) => o.id);
+  assert.equal(ids.includes(objectives[0]!.id), false);
+});
+
 test('a goal that is not running refuses to be iterated by hand', async () => {
   // Only the loop reads a report, and the loop leaves a paused goal alone — so
   // an iteration started here would spend tokens and be thrown away.

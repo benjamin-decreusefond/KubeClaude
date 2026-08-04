@@ -76,6 +76,16 @@ export function GoalDetail() {
     void act(() => api.updateGoal(goal.id, { objectives }));
   };
 
+  /**
+   * Drop an objective the goal should stop chasing. The id it held is not
+   * reused, so the progress log keeps meaning what it said at the time.
+   */
+  const removeObjective = (objective: Objective) => {
+    if (!window.confirm(`Remove “${objective.text}” from this goal?`)) return;
+    const objectives = goal.objectives.filter((entry) => entry.id !== objective.id);
+    void act(() => api.updateGoal(goal.id, { objectives }));
+  };
+
   const addObjectives = () => {
     const lines = newObjectives
       .split('\n')
@@ -119,6 +129,12 @@ export function GoalDetail() {
               {goal.status === 'paused' ? 'Resume' : 'Keep going'}
             </button>
           )}
+          {/* In the header with the other things you do to a goal. It used to be
+              an action on the Iterations card, where nobody looking for the
+              mission or the cadence would think to open it. */}
+          <button className="ghost" onClick={() => setSettingsOpen((value) => !value)}>
+            {settingsOpen ? 'Hide settings' : 'Edit'}
+          </button>
           <button
             className="primary"
             // Only an active goal has anything read its report, so iterating a
@@ -207,7 +223,7 @@ export function GoalDetail() {
                       </div>
                     )}
                   </td>
-                  <td style={{ width: 96, textAlign: 'right' }}>
+                  <td style={{ width: 150, textAlign: 'right' }}>
                     <button
                       className="ghost small"
                       disabled={busy}
@@ -219,6 +235,14 @@ export function GoalDetail() {
                       onClick={() => toggleStanding(objective)}
                     >
                       {objective.continuous ? 'Closable' : 'Standing'}
+                    </button>
+                    <button
+                      className="ghost small"
+                      disabled={busy}
+                      title="Remove this objective"
+                      onClick={() => removeObjective(objective)}
+                    >
+                      Remove
                     </button>
                   </td>
                   <td className="muted num" style={{ width: 48 }}>
@@ -297,11 +321,6 @@ export function GoalDetail() {
       <Card
         title="Iterations"
         subtitle="Every run this goal has made."
-        actions={
-          <button className="ghost small" onClick={() => setSettingsOpen((value) => !value)}>
-            {settingsOpen ? 'Hide settings' : 'Settings'}
-          </button>
-        }
       >
         {goal.runs.length === 0 ? (
           <Empty>No runs yet.</Empty>
@@ -326,7 +345,33 @@ export function GoalDetail() {
       </Card>
 
       {settingsOpen && (
-        <Card title="Settings" subtitle="How hard this goal pushes, and what it runs as.">
+        <Card title="Settings" subtitle="What this goal is after, how hard it pushes, and what it runs as.">
+          {/* The mission is read by every iteration, so it is the thing most
+              worth being able to change once you have seen what the goal does
+              with it. Saved on blur, like everything else on this card. */}
+          <Field label="Name">
+            <input
+              type="text"
+              defaultValue={goal.name}
+              onBlur={(event) => {
+                const name = event.target.value.trim();
+                if (name && name !== goal.name) void act(() => api.updateGoal(goal.id, { name }));
+              }}
+            />
+          </Field>
+          <Field label="Mission" hint="The standing brief every iteration reads.">
+            <textarea
+              defaultValue={goal.description}
+              style={{ minHeight: 90 }}
+              onBlur={(event) => {
+                const description = event.target.value;
+                if (description !== goal.description) {
+                  void act(() => api.updateGoal(goal.id, { description }));
+                }
+              }}
+            />
+          </Field>
+
           <div className="grid-2">
             <Field label="Wait between iterations (minutes)">
               <input
