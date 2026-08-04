@@ -70,7 +70,14 @@ export async function buildServer(): Promise<FastifyInstance> {
         source: 'server',
         message: error.message,
         detail: error.stack ?? null,
-        context: `${request.method} ${request.url}`,
+        // The route as registered — `/api/runs/:id/events` — rather than the
+        // URL as called. The feed counts distinct faults, and the context is
+        // part of what makes one distinct; with ids and query strings in it,
+        // one failing endpoint that the browser polls writes a brand-new row
+        // per poll and evicts every other error in the feed within a couple of
+        // hundred of them. Which endpoint broke is the useful granularity, and
+        // the concrete URL is already in the log line above.
+        context: `${request.method} ${request.routeOptions.url ?? request.url}`,
       });
     }
     reply.code(status).send({ error: status === 500 ? 'Internal server error' : error.message });
