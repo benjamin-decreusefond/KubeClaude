@@ -167,7 +167,9 @@ export const api = {
       body: JSON.stringify({ expression, timezone }),
     }),
 
-  runs: (params: { promptId?: string; status?: string; limit?: number; offset?: number } = {}) => {
+  runs: (
+    params: { promptId?: string; status?: string; q?: string; limit?: number; offset?: number } = {},
+  ) => {
     const query = new URLSearchParams();
     for (const [key, value] of Object.entries(params)) {
       if (value !== undefined && value !== '') query.set(key, String(value));
