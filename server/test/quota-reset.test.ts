@@ -20,6 +20,7 @@ const {
   recordQuotaReset,
 } = await import('../src/store/usage.js');
 const { shouldFire } = await import('../src/scheduler.js');
+const { detectRateLimitAt } = await import('../src/claude/rate-limit.js');
 
 before(() => migrate());
 after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
@@ -142,6 +143,32 @@ test('a reset days out cannot pin the five-hour window open', () => {
   assert.equal(active.endsAtObserved, false);
   // And nothing was left behind for the next window to inherit either.
   assert.equal(getKnownResetAt('session', now), null);
+});
+
+test('a clock reset that has already passed today does not pin the window either', () => {
+  // The realistic way an implausible session reset gets produced, rather than
+  // the three-day one above. The CLI prints a wall-clock time; when that time
+  // has already gone by, the parser reads it as tomorrow's — correctly, since
+  // a reset is always ahead. What comes out is a "session" reset the better
+  // part of a day away, which a five-hour allowance cannot do.
+  const now = new Date('2026-09-25T20:00:00Z');
+  const parsed = detectRateLimitAt(now, "You've hit your session limit · resets 3:10pm (Europe/Paris)");
+  assert.equal(parsed.scope, 'session');
+  assert.equal(parsed.resetAt, '2026-09-26T13:10:00.000Z');
+
+  const windows = openWindows(now);
+  assert.equal(
+    recordQuotaReset({ kind: 'session', resetAt: parsed.resetAt, runId: null, evidence: parsed.evidence }, now),
+    null,
+  );
+
+  // Seventeen hours of every run's spend would otherwise pile into one window
+  // measured against a five-hour budget, with the guard refusing to start
+  // anything the whole time.
+  const active = getActiveWindow('session', now)!;
+  assert.equal(active.id, windows.session.id);
+  assert.equal(active.endsAt, '2026-09-26T01:00:00.000Z');
+  assert.equal(active.endsAtObserved, false);
 });
 
 test('the nearest still-future observation is the one that counts', () => {
