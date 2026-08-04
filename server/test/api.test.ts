@@ -96,6 +96,57 @@ test('a prompt can be created, read back, listed and changed', async () => {
   await kube.request({ method: 'PATCH', url: `/api/prompts/${promptId}`, payload: { enabled: true } });
 });
 
+test('a prompt can be duplicated, with a fresh name and no triggers', async () => {
+  const created = await kube.request({
+    method: 'POST',
+    url: '/api/prompts',
+    payload: {
+      name: 'duplicate-me',
+      description: 'Original',
+      prompt: 'Do the original thing',
+      model: 'claude-sonnet-5',
+      env: { FOO: 'bar' },
+    },
+  });
+  const original = created.json<{ id: string }>();
+
+  await kube.request({
+    method: 'POST',
+    url: `/api/prompts/${original.id}/triggers`,
+    payload: { type: 'interval', config: { intervalMinutes: 30 } },
+  });
+
+  const duplicated = await kube.request({ method: 'POST', url: `/api/prompts/${original.id}/duplicate` });
+  assert.equal(duplicated.status, 201);
+  const copy = duplicated.json<{
+    id: string;
+    name: string;
+    prompt: string;
+    env: Record<string, string>;
+    triggers: unknown[];
+  }>();
+
+  assert.notEqual(copy.id, original.id);
+  assert.equal(copy.name, 'duplicate-me (copy)');
+  assert.equal(copy.prompt, 'Do the original thing');
+  assert.deepEqual(copy.env, { FOO: 'bar' });
+
+  // The interval trigger stays with the prompt it was firing, not the copy.
+  const copyTriggers = await kube.request({ method: 'GET', url: `/api/prompts/${copy.id}/triggers` });
+  assert.deepEqual(copyTriggers.json(), []);
+
+  // A second duplicate does not collide with the first.
+  const again = await kube.request({ method: 'POST', url: `/api/prompts/${original.id}/duplicate` });
+  assert.equal(again.json<{ name: string }>().name, 'duplicate-me (copy 2)');
+
+  const missing = await kube.request({ method: 'POST', url: '/api/prompts/does-not-exist/duplicate' });
+  assert.equal(missing.status, 404);
+
+  await kube.request({ method: 'DELETE', url: `/api/prompts/${original.id}` });
+  await kube.request({ method: 'DELETE', url: `/api/prompts/${copy.id}` });
+  await kube.request({ method: 'DELETE', url: `/api/prompts/${again.json<{ id: string }>().id}` });
+});
+
 test('the CLI execution controls round-trip through the API', async () => {
   const created = await kube.request({
     method: 'POST',

@@ -507,6 +507,7 @@ Restoring is deliberate — stop the pod, put the copy over `kubeclaude.db`, sta
 | `GET /api/status`, `/api/usage`, `/api/capabilities`, `/api/models` | Health, quota, what the runs can reach. `capabilities` includes the git identity and whether a GitHub token is forwarded — never the token |
 | `GET POST /api/prompts`, `PATCH DELETE /api/prompts/:id` | Prompts |
 | `POST /api/prompts/:id/run` | Queue a run now |
+| `POST /api/prompts/:id/duplicate` | Copy a prompt's full configuration under a fresh name, with no triggers — a starting point, not a second copy of the same schedule |
 | `GET /api/prompts/:id/files` | Paths under a prompt's working directory, for the composer's `@` completion |
 | `GET POST /api/prompts/:id/triggers`, `PATCH DELETE /api/triggers/:id` | Triggers |
 | `POST /api/webhooks/:id/:token` | Fire a webhook trigger. Public: the token authenticates it |
