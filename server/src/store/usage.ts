@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { boolFromDb, boolToDb, db } from '../db.js';
+import { logger } from '../logger.js';
 import type { BudgetBasis, UsageTotals, UsageWindow, WindowKind } from '../types.js';
 import { getSettings } from './settings.js';
 
@@ -83,6 +84,32 @@ export function recordQuotaReset(
 ): QuotaResetObservation | null {
   const reset = new Date(input.resetAt);
   if (Number.isNaN(reset.getTime()) || reset.getTime() <= at.getTime()) return null;
+
+  /*
+   * A reset far further out than the window it claims to be for is not that
+   * window's reset. Most limit wordings do not name a scope, so the caller has
+   * to guess and it guesses `session` — which means a weekly limit arrives here
+   * labelled `session`, stamps its days-out reset onto the open session window,
+   * and pins it there. Every run's spend then piles into that one window against
+   * a five-hour budget, and the quota guard refuses to start anything until the
+   * weekly reset lands. `openWindow` reads the same observation for every window
+   * it opens afterwards, so the bad value would survive rollover as well.
+   *
+   * The bound is deliberately loose. `sessionWindowHours` is our guess at how
+   * long Claude's window is rather than something Claude told us, so a reset
+   * modestly past it is plausible and worth keeping — being strict here would
+   * throw away exactly the observation that corrects the guess. Twice the length
+   * still separates hours from days, which is the confusion that actually
+   * happens, and refusing costs only the arithmetic fallback we had anyway.
+   */
+  const horizon = at.getTime() + windowDurationMs(input.kind) * 2;
+  if (reset.getTime() > horizon) {
+    logger.warn(
+      { kind: input.kind, resetAt: reset.toISOString(), evidence: input.evidence },
+      'ignoring a quota reset too far out to belong to the window it claims to be for',
+    );
+    return null;
+  }
 
   const observation: QuotaResetObservation = {
     kind: input.kind,

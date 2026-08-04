@@ -388,6 +388,15 @@ export function pruneOldRuns(retentionDays: number): number {
     db.prepare(
       'UPDATE goal_iterations SET run_id = NULL WHERE run_id IS NOT NULL AND run_id NOT IN (SELECT id FROM runs)',
     ).run();
+    // The same dead end, but this one is load-bearing rather than cosmetic: the
+    // next iteration passes `last_run_id` as the run it continues, and a parent
+    // that is no longer there makes the new run its own thread root — so the
+    // goal quietly starts a second thread instead of carrying on the first. A
+    // goal left paused longer than the retention window hits this the moment
+    // somebody resumes it.
+    db.prepare(
+      'UPDATE goals SET last_run_id = NULL WHERE last_run_id IS NOT NULL AND last_run_id NOT IN (SELECT id FROM runs)',
+    ).run();
   }
   return removed;
 }
