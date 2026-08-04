@@ -293,16 +293,32 @@ export function updateRun(id: string, patch: Partial<Run>): Run | null {
  */
 export const RESTART_REASON = 'restart';
 
-/** Any run left mid-flight by a pod restart is not recoverable; close it out. */
+/**
+ * Any run left mid-flight by a pod restart is not recoverable; close it out.
+ *
+ * The duration is worked out from `started_at` rather than left null. Null does
+ * not read as "unknown" anywhere it lands: the Runs list and the run page both
+ * show a dash, as though the run took no time at all, and the dashboard's
+ * wall-clock figure is a `SUM` over the column, which skips nulls entirely — so
+ * the runs a restart killed, generally the longest ones, went missing from the
+ * total that is meant to include them. `started_at` is written by the same
+ * statement that sets `running`, so it is always there; the null branch is for
+ * the row that somehow is not, where having no duration is the honest answer.
+ */
 export function failOrphanedRuns(): number {
   const now = new Date().toISOString();
   return db
     .prepare(
       `UPDATE runs SET status = 'failed', finished_at = ?, error = 'Interrupted by a KubeClaude restart',
-         completion_reason = ?
+         completion_reason = ?,
+         duration_ms = CASE
+           WHEN started_at IS NOT NULL
+             THEN CAST((julianday(?) - julianday(started_at)) * 86400000 AS INTEGER)
+           ELSE NULL
+         END
        WHERE status = 'running'`,
     )
-    .run(now, RESTART_REASON).changes;
+    .run(now, RESTART_REASON, now).changes;
 }
 
 /**

@@ -195,6 +195,36 @@ test('a restart mid-iteration is not held against a goal', async () => {
   assert.match(entry?.summary ?? '', /restarted/i);
 });
 
+test('a run a restart interrupted still says how long it had been going', () => {
+  const prompt = makePrompt({ name: 'orphan-duration' });
+  const run = runStore.createRun({
+    promptId: prompt.id,
+    promptName: prompt.name,
+    triggerId: null,
+    triggerType: 'manual',
+    promptText: 'work',
+  });
+
+  // Seven and a half minutes in when the pod went down.
+  const startedAt = new Date(Date.now() - 450_500).toISOString();
+  runStore.updateRun(run.id, { status: 'running', startedAt });
+
+  assert.ok(runStore.failOrphanedRuns() > 0);
+
+  const interrupted = runStore.getRun(run.id)!;
+  assert.equal(interrupted.status, 'failed');
+  // Left null this reads as a run that took no time at all — a dash in the
+  // list and on the run page, and nothing at all in the dashboard's wall-clock
+  // total, which is a SUM that skips nulls. The runs a restart kills are
+  // generally the long ones, so that total was missing exactly them.
+  assert.ok(interrupted.durationMs !== null, 'the duration should have been worked out, not left null');
+  // Computed from started_at, so it is the real elapsed time rather than zero.
+  assert.ok(
+    Math.abs(interrupted.durationMs - 450_500) < 2_000,
+    `expected about 450500ms, got ${interrupted.durationMs}`,
+  );
+});
+
 test('an objective added while an iteration is being reviewed is not lost', async () => {
   const prompt = makePrompt({ kind: 'goal', name: 'goal-race', completionCheck: 'always' });
   const goal = goalStore.createGoal({
