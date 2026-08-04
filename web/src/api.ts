@@ -142,6 +142,7 @@ export const api = {
     request<Prompt>(`/api/prompts/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   deletePrompt: (id: string) => request<void>(`/api/prompts/${id}`, { method: 'DELETE' }),
   duplicatePrompt: (id: string) => request<Prompt>(`/api/prompts/${id}/duplicate`, { method: 'POST' }),
+  exportPrompt: (id: string) => request<Record<string, unknown>>(`/api/prompts/${id}/export`),
   promptFiles: (id: string, q = '', limit = 20) =>
     request<{ root: string; items: Array<{ path: string; directory: boolean }> }>(
       `/api/prompts/${id}/files?q=${encodeURIComponent(q)}&limit=${limit}`,

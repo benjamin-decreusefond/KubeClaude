@@ -147,6 +147,56 @@ test('a prompt can be duplicated, with a fresh name and no triggers', async () =
   await kube.request({ method: 'DELETE', url: `/api/prompts/${again.json<{ id: string }>().id}` });
 });
 
+test('a prompt exports as portable JSON that imports straight back through create', async () => {
+  const created = await kube.request({
+    method: 'POST',
+    url: '/api/prompts',
+    payload: {
+      name: 'export-me',
+      description: 'Round-trips',
+      prompt: 'Do the exported thing',
+      model: 'claude-sonnet-5',
+      env: { FOO: 'bar' },
+    },
+  });
+  const original = created.json<{ id: string }>();
+
+  const exported = await kube.request({ method: 'GET', url: `/api/prompts/${original.id}/export` });
+  assert.equal(exported.status, 200);
+  assert.match(String(exported.headers['content-disposition']), /attachment; filename="export-me\.json"/);
+  const portable = exported.json<{
+    id?: string;
+    kind?: string;
+    title?: string;
+    name: string;
+    prompt: string;
+    env: Record<string, string>;
+  }>();
+
+  // Nothing that would be meaningless — or a collision — anywhere else.
+  assert.equal(portable.id, undefined);
+  assert.equal(portable.kind, undefined);
+  assert.equal(portable.title, undefined);
+  assert.equal(portable.env.FOO, 'bar');
+
+  // The exported shape is exactly what creating a prompt accepts back.
+  const imported = await kube.request({
+    method: 'POST',
+    url: '/api/prompts',
+    payload: { ...portable, name: 'imported-from-export' },
+  });
+  assert.equal(imported.status, 201);
+  const reimported = imported.json<{ id: string; prompt: string; env: Record<string, string> }>();
+  assert.equal(reimported.prompt, 'Do the exported thing');
+  assert.deepEqual(reimported.env, { FOO: 'bar' });
+
+  const missing = await kube.request({ method: 'GET', url: '/api/prompts/does-not-exist/export' });
+  assert.equal(missing.status, 404);
+
+  await kube.request({ method: 'DELETE', url: `/api/prompts/${original.id}` });
+  await kube.request({ method: 'DELETE', url: `/api/prompts/${reimported.id}` });
+});
+
 test('the CLI execution controls round-trip through the API', async () => {
   const created = await kube.request({
     method: 'POST',
