@@ -24,6 +24,8 @@ const listQuery = z.object({
       'capped',
     ])
     .optional(),
+  /** Free text over the prompt name, the instructions, the result and the error. */
+  q: z.string().max(200).optional(),
   limit: z.coerce.number().int().min(1).max(500).default(50),
   offset: z.coerce.number().int().min(0).default(0),
 });
@@ -32,10 +34,10 @@ export async function runRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/runs', async (request, reply) => {
     const parsed = listQuery.safeParse(request.query);
     if (!parsed.success) return reply.code(400).send({ error: 'Invalid query' });
-    const { promptId, status, limit, offset } = parsed.data;
+    const { promptId, status, q, limit, offset } = parsed.data;
     return {
-      items: runStore.listRuns({ promptId, status: status, limit, offset }),
-      total: runStore.countRuns({ promptId, status: status }),
+      items: runStore.listRuns({ promptId, status, q, limit, offset }),
+      total: runStore.countRuns({ promptId, status, q }),
     };
   });
 

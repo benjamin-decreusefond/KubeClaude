@@ -140,11 +140,21 @@ export function getRun(id: string): Run | null {
 export interface ListRunsOptions {
   promptId?: string;
   status?: RunStatus;
+  /**
+   * Free text, matched against the prompt's name, what the run was asked to do,
+   * what it answered and how it failed. Finding the run that mentioned a
+   * particular file or error is otherwise a matter of opening them one by one.
+   */
+  q?: string;
   limit?: number;
   offset?: number;
 }
 
-export function listRuns(options: ListRunsOptions = {}): Run[] {
+/** The filter half of a runs query, shared so list and count cannot disagree. */
+function runFilter(options: Pick<ListRunsOptions, 'promptId' | 'status' | 'q'>): {
+  clause: string;
+  params: unknown[];
+} {
   const where: string[] = [];
   const params: unknown[] = [];
   if (options.promptId) {
@@ -155,7 +165,22 @@ export function listRuns(options: ListRunsOptions = {}): Run[] {
     where.push('status = ?');
     params.push(options.status);
   }
-  const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const term = options.q?.trim();
+  if (term) {
+    where.push(
+      "(prompt_name LIKE ? ESCAPE '\\' OR prompt_text LIKE ? ESCAPE '\\' OR " +
+        "COALESCE(result_text, '') LIKE ? ESCAPE '\\' OR COALESCE(error, '') LIKE ? ESCAPE '\\')",
+    );
+    // Escaped, so a literal % or _ in the term stays literal rather than
+    // quietly widening the search to match anything.
+    const pattern = `%${term.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+    params.push(pattern, pattern, pattern, pattern);
+  }
+  return { clause: where.length ? `WHERE ${where.join(' AND ')}` : '', params };
+}
+
+export function listRuns(options: ListRunsOptions = {}): Run[] {
+  const { clause, params } = runFilter(options);
   params.push(Math.min(options.limit ?? 50, 500), options.offset ?? 0);
   return db
     .prepare<unknown[], RunRow>(`SELECT * FROM runs ${clause} ORDER BY queued_at DESC LIMIT ? OFFSET ?`)
@@ -163,18 +188,8 @@ export function listRuns(options: ListRunsOptions = {}): Run[] {
     .map(toRun);
 }
 
-export function countRuns(options: Pick<ListRunsOptions, 'promptId' | 'status'> = {}): number {
-  const where: string[] = [];
-  const params: unknown[] = [];
-  if (options.promptId) {
-    where.push('prompt_id = ?');
-    params.push(options.promptId);
-  }
-  if (options.status) {
-    where.push('status = ?');
-    params.push(options.status);
-  }
-  const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+export function countRuns(options: Pick<ListRunsOptions, 'promptId' | 'status' | 'q'> = {}): number {
+  const { clause, params } = runFilter(options);
   const row = db
     .prepare<unknown[], { count: number }>(`SELECT COUNT(*) AS count FROM runs ${clause}`)
     .get(...(params as never[]));

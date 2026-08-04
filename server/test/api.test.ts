@@ -591,6 +591,34 @@ test('running a prompt queues a run and the run shows up in the listing', async 
   assert.ok([200, 409].includes(cancelled.status));
 });
 
+test('runs can be searched by what they were asked to do', async () => {
+  const queued = await kube.request({
+    method: 'POST',
+    url: `/api/prompts/${promptId}/run`,
+    payload: { promptText: 'Investigate the flaky widget-service deploy' },
+  });
+  const run = queued.json<{ id: string }>();
+
+  const hit = await kube.request({ method: 'GET', url: '/api/runs?q=widget-service' });
+  assert.equal(hit.status, 200);
+  const found = hit.json<{ items: Array<{ id: string }>; total: number }>();
+  assert.ok(
+    found.items.some((item) => item.id === run.id),
+    'the run whose instructions mention the term should be found',
+  );
+  // The count has to agree with the page, or paging through a search misleads.
+  assert.equal(found.total, found.items.length);
+
+  const miss = await kube.request({ method: 'GET', url: '/api/runs?q=nothing-mentions-this-string' });
+  assert.deepEqual(miss.json<{ items: unknown[]; total: number }>(), { items: [], total: 0 });
+
+  // A wildcard typed into the box is a literal, not a match-everything.
+  const literal = await kube.request({ method: 'GET', url: '/api/runs?q=%25' });
+  assert.equal(literal.json<{ total: number }>().total, 0);
+
+  await kube.request({ method: 'POST', url: `/api/runs/${run.id}/cancel` });
+});
+
 // --------------------------------------------------------------------------
 // Goals
 // --------------------------------------------------------------------------

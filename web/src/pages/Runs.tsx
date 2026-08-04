@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { Banner, Card, Empty, StatusBadge } from '../components/primitives';
@@ -22,12 +22,24 @@ const PAGE_SIZE = 100;
 export function Runs() {
   const [status, setStatus] = useState<RunStatus | undefined>(undefined);
   const [page, setPage] = useState(0);
+  const [search, setSearch] = useState('');
   const now = useTicker(15_000);
 
+  // Debounced, so typing a word does not fire a query per keystroke against a
+  // LIKE over every run's output.
+  const [query, setQuery] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setQuery(search);
+      setPage(0);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
   const { data, refresh } = usePolled<{ items: Run[]; total: number }>(
-    () => api.runs({ status, limit: PAGE_SIZE, offset: page * PAGE_SIZE }),
+    () => api.runs({ status, q: query, limit: PAGE_SIZE, offset: page * PAGE_SIZE }),
     15_000,
-    [status, page],
+    [status, page, query],
   );
 
   const [cancelling, setCancelling] = useState<string | null>(null);
@@ -88,6 +100,13 @@ export function Runs() {
           </button>
         ))}
       </nav>
+
+      <input
+        type="search"
+        placeholder="Search runs — prompt name, instructions, output, error"
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+      />
 
       {error && <Banner tone="critical">{error}</Banner>}
 

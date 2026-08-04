@@ -517,7 +517,7 @@ Restoring is deliberate — stop the pod, put the copy over `kubeclaude.db`, sta
 | `GET POST /api/goals`, `GET PATCH DELETE /api/goals/:id` | Goals and their objectives |
 | `POST /api/goals/:id/start`, `/pause`, `/iterate` | Resume the loop, hold it, run one iteration now |
 | `GET /api/goals/:id/iterations` | The progress log |
-| `GET /api/runs`, `/api/runs/:id`, `/api/runs/:id/events`, `/api/runs/:id/thread` | Runs |
+| `GET /api/runs`, `/api/runs/:id`, `/api/runs/:id/events`, `/api/runs/:id/thread` | Runs. The list takes `promptId`, `status`, and `q` — free text matched against the prompt name, the instructions, the result and the error |
 | `POST /api/runs/:id/cancel`, `/resume`, `/follow-up` | Act on a run |
 | `GET POST /api/mcp-servers`, `PATCH DELETE /api/mcp-servers/:id` | MCP connections |
 | `GET POST /api/agents`, `PATCH DELETE /api/agents/:id` | Shared subagent definitions |
