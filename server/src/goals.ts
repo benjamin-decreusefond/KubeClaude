@@ -23,8 +23,16 @@ import type { Goal, GoalIteration, Objective, Run } from './types.js';
 /** Terminal statuses that mean the iteration ran and produced something to read. */
 const REVIEWABLE: ReadonlySet<string> = new Set(['succeeded']);
 
-/** Statuses that mean the loop should stop rather than keep burning tokens. */
-const FATAL_RUN_STATUSES: ReadonlySet<string> = new Set(['failed', 'timeout']);
+/**
+ * Statuses that mean the loop should stop rather than keep burning tokens.
+ *
+ * `rate_limited` only ever reaches here once auto-resume has given up on it —
+ * `advanceGoal` returns early while a resume is still pending, so a run whose
+ * report `reviewIteration` actually reads is always the exhausted case.
+ * `skipped` is the same outcome by a different route: the quota was gone and
+ * nothing was even going to try resuming it.
+ */
+const FATAL_RUN_STATUSES: ReadonlySet<string> = new Set(['failed', 'timeout', 'capped', 'rate_limited', 'skipped']);
 
 /**
  * What the log calls an iteration the process was restarted out of. Not one of

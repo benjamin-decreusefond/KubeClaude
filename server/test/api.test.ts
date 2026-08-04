@@ -564,6 +564,35 @@ test('objectives can be added and ticked by hand, and the goal ends when they ar
   assert.equal(ticked.json<{ status: string }>().status, 'achieved');
 });
 
+test('an unrelated edit does not clobber an objective ticked while the request was in flight', async () => {
+  const created = await kube.request({
+    method: 'POST',
+    url: '/api/goals',
+    payload: { name: 'Race-prone goal', description: '', objectives: ['First thing'], startNow: false },
+  });
+  const goal = created.json<{ id: string; objectives: Array<{ id: string }> }>();
+
+  // An iteration's review ticks an objective off directly in the store, the
+  // way `reviewIteration` does — concurrently with, and finishing before, an
+  // unrelated PATCH (renaming the goal) that read the goal a moment earlier.
+  const goalStore = await import('../src/store/goals.js');
+  goalStore.tickObjectives(goal.id, [goal.objectives[0]!.id], 'Done via the loop');
+
+  const renamed = await kube.request({
+    method: 'PATCH',
+    url: `/api/goals/${goal.id}`,
+    payload: { name: 'Renamed goal' },
+  });
+  assert.equal(renamed.status, 200);
+  const body = renamed.json<{ name: string; objectives: Array<{ id: string; done: boolean }> }>();
+  assert.equal(body.name, 'Renamed goal');
+  // The rename must not have rewritten objectives from the stale snapshot it
+  // read before the tick landed.
+  assert.equal(body.objectives.find((o) => o.id === goal.objectives[0]!.id)?.done, true);
+
+  await kube.request({ method: 'DELETE', url: `/api/goals/${goal.id}` });
+});
+
 test('a goal can be paused, resumed and iterated on demand', async () => {
   const resumed = await kube.request({ method: 'POST', url: `/api/goals/${goalId}/start` });
   assert.equal(resumed.json<{ status: string }>().status, 'active');
