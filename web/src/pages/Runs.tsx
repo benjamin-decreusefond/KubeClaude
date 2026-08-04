@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
-import { Card, Empty, StatusBadge } from '../components/primitives';
+import { Banner, Card, Empty, StatusBadge } from '../components/primitives';
 import { formatCost, formatDuration, formatRelative, formatTokens, triggerLabel } from '../format';
 import { usePolled, useStream, useTicker } from '../hooks';
 import type { Run, RunStatus } from '../types';
@@ -31,6 +31,7 @@ export function Runs() {
   );
 
   const [cancelling, setCancelling] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   /**
    * Stopping a run from the list rather than from inside it.
@@ -41,7 +42,12 @@ export function Runs() {
    */
   const cancel = async (id: string) => {
     setCancelling(id);
-    await api.cancelRun(id).catch(() => undefined);
+    try {
+      await api.cancelRun(id);
+      setError(null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
     setCancelling(null);
     refresh();
   };
@@ -82,6 +88,8 @@ export function Runs() {
           </button>
         ))}
       </nav>
+
+      {error && <Banner tone="critical">{error}</Banner>}
 
       <Card
         subtitle={

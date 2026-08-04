@@ -95,3 +95,19 @@ test('queued runs have a filter of their own', async () => {
     expect(mocked.runs.mock.calls.at(-1)?.[0]).toMatchObject({ status: 'queued' }),
   );
 });
+
+test('a failed cancel says so, instead of leaving the row unexplained', async () => {
+  mocked.runs.mockResolvedValue({ items: [run('r4', 'queued', 'Keep the cluster tidy')], total: 1 });
+  mocked.cancelRun.mockRejectedValue(new Error('run already finished'));
+
+  render(
+    <MemoryRouter>
+      <Runs />
+    </MemoryRouter>,
+  );
+
+  const cancel = await screen.findByRole('button', { name: 'Cancel' });
+  await userEvent.click(cancel);
+
+  await screen.findByText('run already finished');
+});

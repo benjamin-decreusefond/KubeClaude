@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { ChatTranscript } from '../components/ChatTranscript';
@@ -19,11 +19,17 @@ export function Chat() {
   /** Held while a turn is in flight; sent as soon as it finishes. */
   const [queued, setQueued] = useState<string | null>(null);
 
+  // Tracks the id actually on screen, so a load started for a chat the user
+  // has since navigated away from can't land after the fact and overwrite it.
+  const idRef = useRef(id);
+  idRef.current = id;
+
   const load = useCallback(async () => {
     if (!id) return;
     const detail = await api.chat(id);
-    setChat(detail);
     const pages = await Promise.all(detail.runs.map((run) => api.runEvents(run.id)));
+    if (idRef.current !== id) return;
+    setChat(detail);
     setEventsByRun(new Map(detail.runs.map((run, index) => [run.id, pages[index]!.events])));
   }, [id]);
 
@@ -114,7 +120,12 @@ export function Chat() {
   }, [chat?.busy, queued, send]);
 
   const stop = async () => {
-    await api.stopChat(chat!.id).catch(() => undefined);
+    try {
+      await api.stopChat(chat!.id);
+      setError(null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
     await load();
   };
 
