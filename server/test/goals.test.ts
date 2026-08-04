@@ -16,10 +16,11 @@ process.env.FORWARD_ENV_PREFIXES = 'FAKE_';
 fs.chmodSync(process.env.CLAUDE_BIN, 0o755);
 
 const { migrate } = await import('../src/db.js');
-const { createPrompt, updatePrompt } = await import('../src/store/prompts.js');
+const { createPrompt, getPrompt, updatePrompt } = await import('../src/store/prompts.js');
 const goalStore = await import('../src/store/goals.js');
 const runStore = await import('../src/store/runs.js');
-const { buildIterationPrompt, parseIterationReport, sweepGoals } = await import('../src/goals.js');
+const { buildIterationPrompt, iterationReportInstruction, parseIterationReport, sweepGoals } =
+  await import('../src/goals.js');
 import type { Goal, Prompt } from '../src/types.js';
 
 before(() => migrate());
@@ -267,4 +268,52 @@ test('a goal stuck rate-limited with nothing to resume it pauses too, instead of
 
   assert.equal(goalStore.getGoal(goal.id)?.status, 'paused');
   assert.equal(runStore.countRuns({ promptId: prompt.id }), 3);
+});
+
+test('a standing objective is never ticked off, however sincerely the iteration claims it', async () => {
+  process.env.FAKE_CLAUDE_RESULT =
+    'PROGRESS: Fixed three security holes.\nDONE: o1, o2\nNEXT: keep looking';
+  const { goal, prompt } = makeGoal({}, []);
+  const standing = goalStore.makeObjectives(['Keep it secure'], [], true);
+  const closable = goalStore.makeObjectives(['Write the runbook'], standing);
+  goalStore.updateGoal(goal.id, { objectives: [...standing, ...closable] });
+
+  await sweepGoals(new Date());
+  await settle(prompt.id);
+  await sweepGoals(new Date());
+
+  const after = goalStore.getGoal(goal.id)!;
+  const mission = after.objectives.find((objective) => objective.id === 'o1')!;
+  assert.equal(mission.continuous, true);
+  assert.equal(mission.done, false, 'a standing objective must survive the iteration that claims it');
+  // The closable one alongside it still closes, so this is not just "nothing ticks".
+  assert.equal(after.objectives.find((objective) => objective.id === 'o2')?.done, true);
+  assert.deepEqual(goalStore.listIterations(goal.id)[0]?.achieved, ['o2']);
+  // And with a standing objective open, the goal keeps working rather than ending.
+  assert.equal(after.status, 'active');
+});
+
+test('the iteration prompt marks standing objectives and asks for a session, not a step', () => {
+  const { goal } = makeGoal({}, []);
+  const updated = goalStore.updateGoal(goal.id, {
+    objectives: goalStore.makeObjectives(['Keep it free of bugs'], [], true),
+    cadenceMinutes: 30,
+  })!;
+
+  const text = buildIterationPrompt(updated, []);
+  assert.match(text, /\[~\] o1: Keep it free of bugs \(standing\)/);
+  assert.match(text, /never report them under DONE/);
+  // The depth instruction, and the concrete cost of stopping short of it.
+  assert.match(text, /working session, not a single step/);
+  assert.match(text, /next 30 minutes/);
+});
+
+test('a goal whose prompt predates the current report instruction is brought up to date', async () => {
+  process.env.FAKE_CLAUDE_RESULT = 'PROGRESS: A little.\nDONE: none\nNEXT: more';
+  const { prompt } = makeGoal();
+  updatePrompt(prompt.id, { appendSystemPrompt: 'an older wording' });
+
+  await sweepGoals(new Date());
+  assert.equal(getPrompt(prompt.id)?.appendSystemPrompt, iterationReportInstruction());
+  await settle(prompt.id);
 });

@@ -443,6 +443,13 @@ export interface Objective {
   doneAt: string | null;
   /** How it came to be done: the model's own words, or "marked by hand". */
   note: string | null;
+  /**
+   * A standing objective — "keep it secure", "keep it free of bugs" — that no
+   * amount of work ever finishes. An iteration cannot tick one off, so a goal
+   * carrying one keeps working at it instead of declaring it closed after the
+   * first round of fixes and then drifting.
+   */
+  continuous: boolean;
 }
 
 /**

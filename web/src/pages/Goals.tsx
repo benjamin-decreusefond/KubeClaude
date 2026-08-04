@@ -48,6 +48,7 @@ export function Goals() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [objectives, setObjectives] = useState('');
+  const [continuousObjectives, setContinuousObjectives] = useState(false);
   const [model, setModel] = useState('');
   const [workingDir, setWorkingDir] = useState('');
   const [repoUrl, setRepoUrl] = useState('');
@@ -76,6 +77,7 @@ export function Goals() {
         name: name.trim(),
         description: description.trim(),
         objectives: objectives.split('\n').map((line) => line.replace(/^[-*\s[\]x]+/i, '').trim()),
+        continuousObjectives,
         cadenceMinutes,
         maxIterations,
         stopWhenAchieved,
@@ -152,6 +154,13 @@ export function Goals() {
               style={{ minHeight: 90 }}
             />
           </Field>
+
+          <Checkbox
+            checked={continuousObjectives}
+            onChange={setContinuousObjectives}
+            label="These are standing missions, never finished"
+            hint="For objectives like “keep it secure” or “keep it free of bugs”. No iteration can tick one off, so the goal keeps working at it instead of closing it after the first round of fixes."
+          />
 
           <div className="grid-2">
             <Field label="Model">
@@ -332,8 +341,11 @@ export function Goals() {
               max={Math.max(1, goal.progress.total)}
               leftLabel={
                 goal.progress.total > 0
-                  ? `${goal.progress.done} of ${goal.progress.total} objectives`
-                  : 'No objectives — open-ended'
+                  ? `${goal.progress.done} of ${goal.progress.total} objectives` +
+                    (goal.progress.standing > 0 ? ` · ${goal.progress.standing} standing` : '')
+                  : goal.progress.standing > 0
+                    ? `${goal.progress.standing} standing objective${goal.progress.standing > 1 ? 's' : ''}`
+                    : 'No objectives — open-ended'
               }
               rightLabel={`iteration ${goal.iteration} · ${cadenceLabel(goal.cadenceMinutes)}`}
             />

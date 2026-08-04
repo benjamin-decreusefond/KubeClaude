@@ -21,6 +21,7 @@ export function GoalDetail() {
   const { data: modelData } = usePolled<{ models: ModelOption[] }>(() => api.models(), 0);
 
   const [newObjectives, setNewObjectives] = useState('');
+  const [newStanding, setNewStanding] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -59,6 +60,22 @@ export function GoalDetail() {
     void act(() => api.updateGoal(goal.id, { objectives }));
   };
 
+  /**
+   * Turning an objective standing also un-ticks it: the box was closed on the
+   * understanding that the work was finished, which is exactly what marking it
+   * standing says was never true.
+   */
+  const toggleStanding = (objective: Objective) => {
+    const objectives = goal.objectives.map((entry) =>
+      entry.id === objective.id
+        ? entry.continuous
+          ? { ...entry, continuous: false }
+          : { ...entry, continuous: true, done: false, doneAt: null, note: null }
+        : entry,
+    );
+    void act(() => api.updateGoal(goal.id, { objectives }));
+  };
+
   const addObjectives = () => {
     const lines = newObjectives
       .split('\n')
@@ -66,7 +83,9 @@ export function GoalDetail() {
       .filter(Boolean);
     if (lines.length === 0) return;
     setNewObjectives('');
-    void act(() => api.updateGoal(goal.id, { addObjectives: lines }));
+    void act(() =>
+      api.updateGoal(goal.id, { addObjectives: lines, addObjectivesContinuous: newStanding }),
+    );
   };
 
   const remove = () => {
@@ -135,9 +154,13 @@ export function GoalDetail() {
       <Card
         title="Objectives"
         subtitle={
-          goal.progress.total > 0
-            ? `${goal.progress.done} of ${goal.progress.total} done · iteration ${goal.iteration} · ${cadenceLabel(goal.cadenceMinutes)}`
-            : `Open-ended · iteration ${goal.iteration} · ${cadenceLabel(goal.cadenceMinutes)}`
+          (goal.progress.total > 0
+            ? `${goal.progress.done} of ${goal.progress.total} done`
+            : goal.progress.standing > 0
+              ? 'Standing work'
+              : 'Open-ended') +
+          (goal.progress.standing > 0 ? ` · ${goal.progress.standing} standing` : '') +
+          ` · iteration ${goal.iteration} · ${cadenceLabel(goal.cadenceMinutes)}`
         }
       >
         {goal.progress.total > 0 && (
@@ -160,8 +183,11 @@ export function GoalDetail() {
                     <input
                       type="checkbox"
                       checked={objective.done}
-                      disabled={busy}
+                      // A standing objective has no finish to tick, by hand or
+                      // otherwise — that is what marking it standing means.
+                      disabled={busy || objective.continuous}
                       aria-label={objective.text}
+                      title={objective.continuous ? 'A standing objective is never finished' : undefined}
                       onChange={() => toggleObjective(objective)}
                     />
                   </td>
@@ -169,11 +195,31 @@ export function GoalDetail() {
                     <span style={{ textDecoration: objective.done ? 'line-through' : undefined }}>
                       {objective.text}
                     </span>
+                    {objective.continuous && (
+                      <>
+                        {' '}
+                        <Badge>Standing</Badge>
+                      </>
+                    )}
                     {objective.done && objective.note && (
                       <div className="stat-note">
                         {objective.note} · {formatDateTime(objective.doneAt)}
                       </div>
                     )}
+                  </td>
+                  <td style={{ width: 96, textAlign: 'right' }}>
+                    <button
+                      className="ghost small"
+                      disabled={busy}
+                      title={
+                        objective.continuous
+                          ? 'Let iterations tick this off again'
+                          : 'Never let an iteration tick this off'
+                      }
+                      onClick={() => toggleStanding(objective)}
+                    >
+                      {objective.continuous ? 'Closable' : 'Standing'}
+                    </button>
                   </td>
                   <td className="muted num" style={{ width: 48 }}>
                     {objective.id}
@@ -193,6 +239,12 @@ export function GoalDetail() {
               style={{ minHeight: 60 }}
             />
           </Field>
+          <Checkbox
+            checked={newStanding}
+            onChange={setNewStanding}
+            label="Standing missions, never finished"
+            hint="No iteration can tick these off, so the goal keeps working at them."
+          />
           <div className="row" style={{ justifyContent: 'flex-end' }}>
             <button className="small" disabled={busy || !newObjectives.trim()} onClick={addObjectives}>
               Add

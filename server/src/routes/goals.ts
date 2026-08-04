@@ -25,9 +25,18 @@ function uniquePromptName(name: string): string {
   return promptStore.promptNameExists(base) ? `${base} ${randomUUID().slice(0, 6)}` : base;
 }
 
+/**
+ * Only closable objectives count towards the bar. A standing one can never be
+ * done, so leaving it in the denominator would show a goal that is working
+ * exactly as intended as permanently stuck short of the finish.
+ */
 function progressOf(goal: Goal) {
-  const done = goal.objectives.filter((objective) => objective.done).length;
-  return { done, total: goal.objectives.length };
+  const closable = goal.objectives.filter((objective) => !objective.continuous);
+  return {
+    done: closable.filter((objective) => objective.done).length,
+    total: closable.length,
+    standing: goal.objectives.length - closable.length,
+  };
 }
 
 function goalView(goal: Goal, prompt: Prompt | null) {
@@ -135,7 +144,7 @@ export async function goalRoutes(app: FastifyInstance): Promise<void> {
       promptId: prompt.id,
       name: input.name,
       description: input.description,
-      objectives: goalStore.makeObjectives(input.objectives),
+      objectives: goalStore.makeObjectives(input.objectives, [], input.continuousObjectives),
       status: 'active',
       cadenceMinutes: input.cadenceMinutes,
       maxIterations: input.maxIterations,
@@ -182,7 +191,7 @@ export async function goalRoutes(app: FastifyInstance): Promise<void> {
     if (input.objectives !== undefined || input.addObjectives !== undefined) {
       const base = input.objectives ?? goal.objectives;
       objectives = input.addObjectives
-        ? [...base, ...goalStore.makeObjectives(input.addObjectives, base)]
+        ? [...base, ...goalStore.makeObjectives(input.addObjectives, base, input.addObjectivesContinuous)]
         : base;
     }
 

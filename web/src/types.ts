@@ -77,6 +77,8 @@ export interface Objective {
   done: boolean;
   doneAt: string | null;
   note: string | null;
+  /** A standing mission no iteration can tick off. */
+  continuous: boolean;
 }
 
 export interface Goal {
@@ -95,7 +97,8 @@ export interface Goal {
   lastIterationAt: string | null;
   createdAt: string;
   updatedAt: string;
-  progress: { done: number; total: number };
+  /** Closable objectives only; standing ones are counted separately. */
+  progress: { done: number; total: number; standing: number };
   prompt: Prompt | null;
   lastRun: Run | null;
 }
@@ -122,6 +125,8 @@ export interface CreateGoalInput {
   name: string;
   description: string;
   objectives: string[];
+  /** Create them all as standing missions rather than closable boxes. */
+  continuousObjectives: boolean;
   cadenceMinutes: number;
   maxIterations: number;
   stopWhenAchieved: boolean;
@@ -145,6 +150,7 @@ export interface UpdateGoalInput {
   description?: string;
   objectives?: Objective[];
   addObjectives?: string[];
+  addObjectivesContinuous?: boolean;
   status?: GoalStatus;
   cadenceMinutes?: number;
   maxIterations?: number;

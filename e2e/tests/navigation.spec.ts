@@ -42,3 +42,11 @@ test('an unknown route lands somewhere real rather than a blank page', async ({ 
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
   expectNoPageErrors(consoleErrors);
 });
+
+test('the wordmark is the way back to the overview', async ({ page, consoleErrors }) => {
+  await page.goto('/runs');
+  await page.getByRole('link', { name: /KubeClaude/ }).first().click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
+  expectNoPageErrors(consoleErrors);
+});
