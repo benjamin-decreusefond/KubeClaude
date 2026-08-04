@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { RunLog } from '../components/RunLog';
@@ -39,6 +39,11 @@ export function RunDetail() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Tracks the id actually on screen, so a load started for a run the user has
+  // since navigated away from can't land after the fact and overwrite the page.
+  const idRef = useRef(id);
+  idRef.current = id;
+
   const load = useCallback(async () => {
     if (!id) return;
     const [fetched, eventPage, threadPage] = await Promise.all([
@@ -46,6 +51,7 @@ export function RunDetail() {
       api.runEvents(id),
       api.runThread(id),
     ]);
+    if (idRef.current !== id) return;
     setRun(fetched);
     setEvents(eventPage.events);
     setThread(threadPage.runs);

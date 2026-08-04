@@ -55,7 +55,14 @@ export async function mcpRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'Invalid MCP connection', details: parsed.error.flatten() });
     }
     if (!mcpStore.getMcpServer(id)) return reply.code(404).send({ error: 'MCP connection not found' });
-    return mcpStore.updateMcpServer(id, parsed.data);
+    try {
+      return mcpStore.updateMcpServer(id, parsed.data);
+    } catch (error) {
+      if (String(error).includes('UNIQUE')) {
+        return reply.code(409).send({ error: 'An MCP connection with that name already exists' });
+      }
+      throw error;
+    }
   });
 
   app.delete('/api/mcp-servers/:id', async (request, reply) => {

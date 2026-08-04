@@ -60,8 +60,17 @@ export async function webhookRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const promptText = appendPayload(prompt.prompt, request.body);
-    const run = enqueueRun({ promptId: prompt.id, triggerId: trigger.id, triggerType: 'webhook', promptText });
-    if (!run) return reply.code(200).send({ accepted: false, reason: 'Could not queue the run' });
+    const run = enqueueRun({
+      promptId: prompt.id,
+      triggerId: trigger.id,
+      triggerType: 'webhook',
+      promptText,
+      // A sender that retries — Asana and most webhook services document
+      // at-least-once delivery — must not stack a second run on top of one
+      // already working through the same prompt.
+      skipIfBusy: true,
+    });
+    if (!run) return reply.code(200).send({ accepted: false, reason: 'The prompt already has a run in progress' });
 
     markFired(trigger.id, new Date().toISOString(), null);
     return reply.code(202).send({ accepted: true, runId: run.id });

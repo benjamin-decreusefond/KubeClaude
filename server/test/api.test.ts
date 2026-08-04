@@ -347,6 +347,53 @@ test('a webhook trigger gets a token, and only that token fires it, without auth
   assert.equal((await kube.request({ method: 'DELETE', url: `/api/prompts/${ownPromptId}` })).status, 204);
 });
 
+test('a retried webhook delivery does not stack a second run on a busy prompt', async () => {
+  // Asana and most webhook senders document at-least-once delivery: a slow or
+  // ambiguous response gets retried, and the retry must not queue a second run
+  // on top of the one still working through the first delivery.
+  const ownPrompt = await kube.request({
+    method: 'POST',
+    url: '/api/prompts',
+    payload: { name: 'webhook-busy-target', prompt: 'handle the webhook' },
+  });
+  const ownPromptId = ownPrompt.json<{ id: string }>().id;
+
+  const created = await kube.request({
+    method: 'POST',
+    url: `/api/prompts/${ownPromptId}/triggers`,
+    payload: { type: 'webhook' },
+  });
+  const trigger = created.json<{ id: string; webhookToken: string }>();
+
+  // A run that never finishes on its own, so the prompt is reliably still busy
+  // for the second delivery regardless of scheduling.
+  process.env.FAKE_CLAUDE_MODE = 'burn';
+  try {
+    const first = await kube.request({
+      method: 'POST',
+      url: `/api/webhooks/${trigger.id}/${trigger.webhookToken}`,
+      payload: {},
+    });
+    assert.equal(first.status, 202);
+    const runId = first.json<{ runId: string }>().runId;
+
+    const retried = await kube.request({
+      method: 'POST',
+      url: `/api/webhooks/${trigger.id}/${trigger.webhookToken}`,
+      payload: {},
+    });
+    assert.equal(retried.status, 200);
+    assert.equal(retried.json<{ accepted: boolean }>().accepted, false);
+
+    await kube.request({ method: 'POST', url: `/api/runs/${runId}/cancel` });
+  } finally {
+    delete process.env.FAKE_CLAUDE_MODE;
+  }
+
+  assert.equal((await kube.request({ method: 'DELETE', url: `/api/triggers/${trigger.id}` })).status, 204);
+  assert.equal((await kube.request({ method: 'DELETE', url: `/api/prompts/${ownPromptId}` })).status, 204);
+});
+
 test('a trigger cannot be edited into a state where it would never fire', async () => {
   const created = await kube.request({
     method: 'POST',
@@ -626,6 +673,34 @@ test('an MCP connection is stored and rendered into a .mcp.json document', async
   assert.equal(bad.status, 400);
 
   assert.equal((await kube.request({ method: 'DELETE', url: `/api/mcp-servers/${server.id}` })).status, 204);
+});
+
+test('renaming an MCP connection onto an existing name is refused cleanly, not a 500', async () => {
+  const first = await kube.request({
+    method: 'POST',
+    url: '/api/mcp-servers',
+    payload: { name: 'taken', config: JSON.stringify({ type: 'sse', url: 'https://one.example/sse' }) },
+  });
+  assert.equal(first.status, 201);
+
+  const second = await kube.request({
+    method: 'POST',
+    url: '/api/mcp-servers',
+    payload: { name: 'free', config: JSON.stringify({ type: 'sse', url: 'https://two.example/sse' }) },
+  });
+  assert.equal(second.status, 201);
+  const secondId = second.json<{ id: string }>().id;
+
+  const renamed = await kube.request({
+    method: 'PATCH',
+    url: `/api/mcp-servers/${secondId}`,
+    payload: { name: 'taken' },
+  });
+  assert.equal(renamed.status, 409);
+  assert.match(renamed.json<{ error: string }>().error, /already exists/);
+
+  assert.equal((await kube.request({ method: 'DELETE', url: `/api/mcp-servers/${first.json<{ id: string }>().id}` })).status, 204);
+  assert.equal((await kube.request({ method: 'DELETE', url: `/api/mcp-servers/${secondId}` })).status, 204);
 });
 
 // --------------------------------------------------------------------------
