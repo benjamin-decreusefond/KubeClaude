@@ -6,7 +6,7 @@ import * as goalStore from './store/goals.js';
 import { getPrompt, updatePrompt } from './store/prompts.js';
 import * as runs from './store/runs.js';
 import { RESTART_REASON } from './store/runs.js';
-import { getQuotaState } from './store/usage.js';
+import { getActiveWindow, getQuotaState, type QuotaSlice } from './store/usage.js';
 import type { Goal, GoalIteration, Objective, Run } from './types.js';
 
 /**
@@ -23,16 +23,26 @@ import type { Goal, GoalIteration, Objective, Run } from './types.js';
 /** Terminal statuses that mean the iteration ran and produced something to read. */
 const REVIEWABLE: ReadonlySet<string> = new Set(['succeeded']);
 
+/** Statuses that mean the loop should stop rather than keep burning tokens. */
+const FATAL_RUN_STATUSES: ReadonlySet<string> = new Set(['failed', 'timeout', 'capped']);
+
 /**
- * Statuses that mean the loop should stop rather than keep burning tokens.
+ * Statuses that mean the allowance ran out, not that the work went wrong.
  *
- * `rate_limited` only ever reaches here once auto-resume has given up on it —
- * `advanceGoal` returns early while a resume is still pending, so a run whose
- * report `reviewIteration` actually reads is always the exhausted case.
- * `skipped` is the same outcome by a different route: the quota was gone and
- * nothing was even going to try resuming it.
+ * These are not fatal: running out of credit is a wait, not a fault, and a goal
+ * that paused itself over it would stay paused long after the quota came back —
+ * with nothing to notice. What they must not do is spin, so the loop holds the
+ * goal until the allowance is actually due back (`quotaHoldUntil`) rather than
+ * retrying every cadence tick against an empty window.
  */
-const FATAL_RUN_STATUSES: ReadonlySet<string> = new Set(['failed', 'timeout', 'capped', 'rate_limited', 'skipped']);
+const QUOTA_RUN_STATUSES: ReadonlySet<string> = new Set(['rate_limited', 'skipped']);
+
+/**
+ * How long to wait before trying again when the quota stopped an iteration and
+ * nothing said when it comes back. Long enough not to spin, short enough that a
+ * goal picks up again reasonably soon after the allowance returns.
+ */
+const BLIND_QUOTA_RETRY_MINUTES = 30;
 
 /**
  * What the log calls an iteration the process was restarted out of. Not one of
@@ -56,9 +66,9 @@ const CONTEXT_ITERATIONS = 5;
 export function iterationReportInstruction(): string {
   return (
     'You are working on a long-running goal, one iteration at a time. An iteration is a working ' +
-    'session, not a single step: keep working until the thread you picked up is actually finished ' +
-    'or you are genuinely blocked. End every response with a report in exactly this shape, as the ' +
-    'last thing you write:\n\n' +
+    'session rather than a single step, but it is not unlimited either: carry the thread you ' +
+    'picked up through to a clean handover point, then hand over. End every response with a ' +
+    'report in exactly this shape, as the last thing you write:\n\n' +
     'PROGRESS: what you actually changed or learned this iteration, in two or three sentences.\n' +
     'DONE: the ids of the objectives you completed this iteration, comma separated, or none.\n' +
     'NEXT: the single most valuable thing the next iteration should do.\n\n' +
@@ -86,8 +96,55 @@ function cadenceSentence(goal: Goal): string {
   return `nothing else happens on this goal for the next ${minutes} minutes.`;
 }
 
-/** The message an iteration is started with. */
-export function buildIterationPrompt(goal: Goal, history: GoalIteration[]): string {
+/** "in about 40 minutes", "in about 3 hours" — enough to pace a session by. */
+function roughly(iso: string, now: Date): string | null {
+  const minutes = Math.round((new Date(iso).getTime() - now.getTime()) / 60_000);
+  if (!Number.isFinite(minutes) || minutes <= 0) return null;
+  if (minutes < 90) return `in about ${minutes} minutes`;
+  return `in about ${Math.round(minutes / 60)} hours`;
+}
+
+/**
+ * How much of the token window is left, and what to do about it.
+ *
+ * The iteration is told to stop at a clean handover point rather than at the
+ * bottom of the budget, but "leave some margin" means nothing without a number
+ * — and the number is right here, so there is no reason to make the model
+ * guess it. When no budget is configured there is nothing honest to say, and
+ * the section is left out entirely.
+ */
+function budgetSection(quota: QuotaSlice | null | undefined, now: Date): string | null {
+  if (!quota || quota.remainingPct === null) return null;
+  const pct = Math.round(quota.remainingPct);
+  const resets = quota.resetsAt ? roughly(quota.resetsAt, now) : null;
+  const when = resets ? ` It resets ${resets}.` : '';
+
+  if (pct <= LOW_BUDGET_PCT) {
+    return (
+      `## Budget\nOnly ${pct}% of the current token window is left.${when} Land something small ` +
+      'and finish cleanly rather than starting anything that needs the rest of it.'
+    );
+  }
+  return (
+    `## Budget\n${pct}% of the current token window is still free.${when} Spend some of it, not ` +
+    'all of it — every other prompt, goal and chat on this instance draws on the same window, ' +
+    'and a goal that empties it stops itself until the reset.'
+  );
+}
+
+/** Below this share of the budget, an iteration should be winding down, not starting. */
+const LOW_BUDGET_PCT = 25;
+
+/**
+ * The message an iteration is started with. `quota` is the token window it will
+ * be spending from; pass null when there is none to speak of.
+ */
+export function buildIterationPrompt(
+  goal: Goal,
+  history: GoalIteration[],
+  quota: QuotaSlice | null = null,
+  now: Date = new Date(),
+): string {
   const parts: string[] = [`# Goal: ${goal.name}`];
   if (goal.description.trim()) parts.push(goal.description.trim());
 
@@ -132,16 +189,22 @@ export function buildIterationPrompt(goal: Goal, history: GoalIteration[]): stri
   parts.push(
     `## This iteration (#${goal.iteration + 1})\n` +
       'This is a working session, not a single step. Pick up the most valuable thread and carry ' +
-      'it all the way through — found, fixed, tested, verified, landed — and when it is genuinely ' +
-      'finished, start the next one. Verify what you claim before you claim it, and do not redo ' +
-      'work an earlier iteration already finished.\n\n' +
-      'Stop only when there is nothing left you can usefully do, or when you are blocked on ' +
-      'something a human has to decide. Waiting on something external — a build, a check, a ' +
-      'deployment — is not being blocked: wait for it and finish the job, or do other useful work ' +
-      "while it runs. Ending the session parked on \"now I wait\" wastes the iteration, because " +
-      `${cadenceSentence(goal)} A one-line confirmation is not an iteration's worth of work.\n\n` +
-      'Then write the report.',
+      'it all the way through — found, fixed, tested, verified, landed. Verify what you claim ' +
+      'before you claim it, and do not redo work an earlier iteration already finished. Waiting ' +
+      'on something external — a build, a check, a deployment — is not being blocked: wait for it ' +
+      'and finish the job rather than handing over something half-landed, because ' +
+      `${cadenceSentence(goal)}\n\n` +
+      'Then stop at the first clean handover point — the work landed, nothing left dangling. ' +
+      'One or two threads carried through is an iteration. A single check or a one-line ' +
+      'confirmation is less than one; working until you run out of things to do, or out of ' +
+      'quota, is more than one, and this loop is meant to last. Whatever you did not get to ' +
+      'goes in NEXT, and the same session picks it up next time.',
   );
+
+  const budget = budgetSection(quota, now);
+  if (budget) parts.push(budget);
+
+  parts.push('Then write the report.');
 
   return parts.join('\n\n');
 }
@@ -332,7 +395,15 @@ export function startIteration(goal: Goal, triggerType = 'goal'): Run | null {
     updatePrompt(prompt.id, { appendSystemPrompt: instruction });
   }
 
-  const promptText = buildIterationPrompt(goal, goalStore.listIterations(goal.id, CONTEXT_ITERATIONS));
+  const now = new Date();
+  const promptText = buildIterationPrompt(
+    goal,
+    goalStore.listIterations(goal.id, CONTEXT_ITERATIONS),
+    // The 5-hour window rather than the weekly one: it is the one an iteration
+    // can actually empty in a single sitting.
+    getQuotaState(now).session,
+    now,
+  );
   const run = enqueueRun({
     promptId: prompt.id,
     triggerType,
@@ -355,6 +426,25 @@ export function startIteration(goal: Goal, triggerType = 'goal'): Run | null {
  */
 export function isAchieved(goal: Goal): boolean {
   return goal.objectives.length > 0 && goal.objectives.every((objective) => objective.done && !objective.continuous);
+}
+
+/**
+ * When a goal stopped by the quota should try again: Claude's own reset time if
+ * it gave one, otherwise the end of the open session window, otherwise a flat
+ * wait. The last case is the one that matters — with no budget configured and
+ * no reset in the message there is nothing to key off, and retrying every
+ * cadence tick would be the spin this whole branch exists to avoid.
+ */
+function quotaHoldUntil(run: Run, now: Date): Date {
+  if (run.rateLimitResetAt) {
+    const reset = new Date(run.rateLimitResetAt);
+    if (!Number.isNaN(reset.getTime())) return reset;
+  }
+  const window = getActiveWindow('session', now);
+  if (window) return new Date(window.endsAt);
+
+  const from = run.finishedAt ? new Date(run.finishedAt).getTime() : now.getTime();
+  return new Date(from + BLIND_QUOTA_RETRY_MINUTES * 60_000);
 }
 
 /** How many iterations in a row ended without producing anything usable. */
@@ -425,6 +515,14 @@ async function advanceGoal(stored: Goal, now: Date): Promise<void> {
   }
 
   if (!prompt.enabled) return;
+
+  // The allowance ran out rather than the work going wrong. Wait for it to come
+  // back — the goal stays active, so it picks itself up without anybody having
+  // to notice it had stopped.
+  if (last && QUOTA_RUN_STATUSES.has(last.status)) {
+    const until = quotaHoldUntil(last, now);
+    if (now.getTime() < until.getTime()) return;
+  }
 
   // Cadence is measured from the end of the last iteration, so a long run does
   // not immediately get another one stacked behind it.

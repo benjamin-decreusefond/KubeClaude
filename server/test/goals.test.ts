@@ -253,21 +253,31 @@ test('repeated failures pause the goal instead of looping on them', async () => 
   assert.equal(runStore.countRuns({ promptId: prompt.id }), 3);
 });
 
-test('a goal stuck rate-limited with nothing to resume it pauses too, instead of looping forever', async () => {
+test('a goal out of quota waits for the reset rather than pausing itself', async () => {
   process.env.FAKE_CLAUDE_MODE = 'ratelimit';
-  // Nothing is ever going to resume this run, so every hit is immediately the
-  // exhausted case rather than a pause waiting on auto-resume.
+  // Nothing is going to resume this run, so the loop meets the exhausted case
+  // rather than a pause waiting on auto-resume. The fake puts the reset an hour out.
   const { goal, prompt } = makeGoal();
   updatePrompt(prompt.id, { autoResume: false });
 
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    await sweepGoals(new Date());
-    await settle(prompt.id);
-    await sweepGoals(new Date());
-  }
+  await sweepGoals(new Date());
+  await settle(prompt.id);
+  await sweepGoals(new Date());
 
-  assert.equal(goalStore.getGoal(goal.id)?.status, 'paused');
-  assert.equal(runStore.countRuns({ promptId: prompt.id }), 3);
+  // Running out of credit is a wait, not a fault — pausing would leave the goal
+  // stopped long after the allowance came back, with nothing to notice.
+  assert.equal(goalStore.getGoal(goal.id)?.status, 'active');
+
+  // And it does not spin at it either, however often the loop comes round.
+  for (let attempt = 0; attempt < 3; attempt += 1) await sweepGoals(new Date());
+  assert.equal(runStore.countRuns({ promptId: prompt.id }), 1);
+
+  // Once the reset has passed it picks itself back up, unattended.
+  delete process.env.FAKE_CLAUDE_MODE;
+  process.env.FAKE_CLAUDE_RESULT = 'PROGRESS: Back at it.\nDONE: none\nNEXT: carry on';
+  await sweepGoals(new Date(Date.now() + 61 * 60_000));
+  assert.equal(runStore.countRuns({ promptId: prompt.id }), 2);
+  await settle(prompt.id);
 });
 
 test('a standing objective is never ticked off, however sincerely the iteration claims it', async () => {
@@ -316,4 +326,36 @@ test('a goal whose prompt predates the current report instruction is brought up 
   await sweepGoals(new Date());
   assert.equal(getPrompt(prompt.id)?.appendSystemPrompt, iterationReportInstruction());
   await settle(prompt.id);
+});
+
+test('the iteration is told to stop at a handover point, with the budget it has left', () => {
+  const { goal } = makeGoal();
+  const now = new Date('2026-08-04T10:00:00Z');
+
+  const plenty = buildIterationPrompt(
+    goal,
+    [],
+    { remainingPct: 62, resetsAt: '2026-08-04T13:10:00Z' } as never,
+    now,
+  );
+  assert.match(plenty, /stop at the first clean handover point/);
+  assert.match(plenty, /62% of the current token window is still free/);
+  assert.match(plenty, /resets in about 3 hours/);
+  assert.match(plenty, /not all of it/);
+
+  // Nearly empty reads differently: wind down rather than start something.
+  const nearlyOut = buildIterationPrompt(
+    goal,
+    [],
+    { remainingPct: 8, resetsAt: '2026-08-04T10:40:00Z' } as never,
+    now,
+  );
+  assert.match(nearlyOut, /Only 8% of the current token window is left/);
+  assert.match(nearlyOut, /resets in about 40 minutes/);
+  assert.match(nearlyOut, /Land something small/);
+
+  // With no budget configured there is nothing honest to say about one.
+  const unconfigured = buildIterationPrompt(goal, [], { remainingPct: null } as never, now);
+  assert.doesNotMatch(unconfigured, /## Budget/);
+  assert.doesNotMatch(buildIterationPrompt(goal, []), /## Budget/);
 });
