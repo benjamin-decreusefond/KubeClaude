@@ -400,6 +400,32 @@ export function SettingsPage() {
         </Field>
       </Card>
 
+      <Card title="Notifications">
+        <Field
+          label="Webhook URL"
+          hint="POSTed a JSON summary when a run finishes — a Slack incoming webhook or any endpoint that accepts JSON. Empty disables notifications."
+        >
+          <input
+            type="url"
+            placeholder="https://hooks.slack.com/services/…"
+            value={draft.notifyWebhookUrl}
+            onChange={(event) => patch({ notifyWebhookUrl: event.target.value })}
+          />
+        </Field>
+        <Checkbox
+          checked={draft.notifyOnFailure}
+          onChange={(notifyOnFailure) => patch({ notifyOnFailure })}
+          label="Notify on failure"
+          hint="Failed, timed out, capped, or stuck rate-limited with no resume scheduled."
+        />
+        <Checkbox
+          checked={draft.notifyOnSuccess}
+          onChange={(notifyOnSuccess) => patch({ notifyOnSuccess })}
+          label="Notify on success"
+          hint="Off by default — most runs succeeding is the expected, quiet outcome."
+        />
+      </Card>
+
       <SecuritySettings />
 
       {message && (

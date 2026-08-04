@@ -399,6 +399,15 @@ export interface Settings {
   autoResumeEnabled: boolean;
   /** Grace period after a quota reset before a resume is attempted. */
   autoResumeDelayMinutes: number;
+  /**
+   * Where to POST a run's outcome once it finishes, e.g. a Slack incoming
+   * webhook or a generic endpoint. Empty disables notifications entirely.
+   */
+  notifyWebhookUrl: string;
+  /** Notify when a run succeeds, not just when it needs attention. */
+  notifyOnSuccess: boolean;
+  /** Notify when a run fails, times out, is stuck rate-limited, or is capped. */
+  notifyOnFailure: boolean;
 }
 
 /**
@@ -513,7 +522,7 @@ export interface UsageTotals {
 }
 
 /** Where a recorded error came from. */
-export type ErrorSource = 'server' | 'browser' | 'run';
+export type ErrorSource = 'server' | 'browser' | 'run' | 'notify';
 
 /** One distinct fault, with how often it has happened since it first did. */
 export interface AppError {

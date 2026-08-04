@@ -1,6 +1,7 @@
 import { config } from './config.js';
 import { bus } from './events.js';
 import { logger } from './logger.js';
+import { notifyRun } from './notify.js';
 import { runClaude } from './claude/runner.js';
 import { detectRateLimit } from './claude/rate-limit.js';
 import { assessCompletion, markerFor, markerInstruction } from './claude/completion.js';
@@ -333,6 +334,10 @@ async function execute(run: Run): Promise<void> {
   } finally {
     inFlight.delete(run.id);
     emitUpdate(run.id);
+    // One hook regardless of which branch above set the terminal status,
+    // rather than repeating the notify call at every call site.
+    const finished = runs.getRun(run.id);
+    if (finished) notifyRun(finished, getSettings());
     if (!shuttingDown) void drain();
   }
 }

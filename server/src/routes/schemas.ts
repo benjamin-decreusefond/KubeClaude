@@ -269,6 +269,9 @@ export const settingsUpdateSchema = z.object({
     .optional(),
   autoResumeEnabled: z.boolean().optional(),
   autoResumeDelayMinutes: z.number().int().min(0).max(1440).optional(),
+  notifyWebhookUrl: z.union([z.literal(''), z.string().url().max(2000)]).optional(),
+  notifyOnSuccess: z.boolean().optional(),
+  notifyOnFailure: z.boolean().optional(),
 });
 
 /**

@@ -9,12 +9,14 @@ const SOURCE_LABEL: Record<ErrorSource, string> = {
   server: 'Server',
   browser: 'Browser',
   run: 'Run',
+  notify: 'Notification',
 };
 
 const SOURCE_TONE: Record<ErrorSource, string> = {
   server: 'critical',
   browser: 'warning',
   run: 'warning',
+  notify: 'warning',
 };
 
 function bytesLabel(bytes: number): string {
