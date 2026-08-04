@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { detectRateLimit } from '../src/claude/rate-limit.js';
+import { detectRateLimit, detectRateLimitAt } from '../src/claude/rate-limit.js';
 
 test('detects the CLI machine-readable usage limit with an epoch reset', () => {
   const info = detectRateLimit('Claude AI usage limit reached|1751808000');
@@ -46,4 +46,43 @@ test('a reset that looks like a date but is not one leaves the limit readable', 
   assert.equal(info.limited, true);
   assert.equal(info.scope, 'weekly');
   assert.equal(info.resetAt, null);
+});
+
+test('detects the wall-clock form the CLI actually prints, and reads the reset out of it', () => {
+  // Verbatim from a goal iteration that was filed as a plain failure instead:
+  // no "reached", and a local time with a zone rather than a timestamp.
+  const now = new Date('2026-08-04T09:00:00Z');
+  const info = detectRateLimitAt(
+    now,
+    "You've hit your session limit · resets 3:10pm (Europe/Paris)",
+  );
+  assert.equal(info.limited, true);
+  assert.equal(info.scope, 'session');
+  // 15:10 in Paris is 13:10 UTC in August, and it is still ahead of us.
+  assert.equal(info.resetAt, '2026-08-04T13:10:00.000Z');
+});
+
+test('a reset time already past today is tomorrow’s', () => {
+  const info = detectRateLimitAt(
+    new Date('2026-08-04T20:00:00Z'),
+    "You've hit your session limit · resets 3:10pm (Europe/Paris)",
+  );
+  assert.equal(info.resetAt, '2026-08-05T13:10:00.000Z');
+});
+
+test('a 24-hour clock and a zone are read the same way', () => {
+  const info = detectRateLimitAt(
+    new Date('2026-08-04T09:00:00Z'),
+    'Weekly limit reached · resets at 06:00 (UTC)',
+  );
+  assert.equal(info.scope, 'weekly');
+  assert.equal(info.resetAt, '2026-08-05T06:00:00.000Z');
+});
+
+test('a reset with no zone, or an unknown one, is simply no reset', () => {
+  const now = new Date('2026-08-04T09:00:00Z');
+  assert.equal(detectRateLimitAt(now, 'Session limit hit, resets 3:10pm').resetAt, null);
+  assert.equal(detectRateLimitAt(now, 'Session limit hit, resets 3:10pm (Mars/Olympus)').resetAt, null);
+  // Still a rate limit, though — the reset is a bonus, not the signal.
+  assert.equal(detectRateLimitAt(now, 'Session limit hit, resets 3:10pm').limited, true);
 });
