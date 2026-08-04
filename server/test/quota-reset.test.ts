@@ -8,7 +8,7 @@ import { test, before, after } from 'node:test';
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kubeclaude-quota-reset-'));
 process.env.DATA_DIR = tmpDir;
 
-const { migrate } = await import('../src/db.js');
+const { migrate, db } = await import('../src/db.js');
 const { createPrompt } = await import('../src/store/prompts.js');
 const { createTrigger, updateTrigger } = await import('../src/store/triggers.js');
 const {
@@ -88,6 +88,31 @@ test('an observed reset moves the open window off the five-hour estimate', () =>
   const quota = getQuotaState(t0);
   assert.equal(quota.session.resetsAt, '2026-09-01T13:20:00.000Z');
   assert.equal(quota.session.resetsAtObserved, true);
+});
+
+test('the gauge quotes the time the guard is actually waiting for', () => {
+  const t0 = new Date('2026-09-15T10:00:00Z');
+  openWindows(t0);
+
+  // Two live observations, the later one written last. `recordQuotaReset` is
+  // last-write-wins, so that is the end the window carries — and the end
+  // `getActiveWindow` keys on to decide the window is still open.
+  recordQuotaReset({ kind: 'session', resetAt: '2026-09-15T13:00:00.000Z', runId: null, evidence: null }, t0);
+  recordQuotaReset({ kind: 'session', resetAt: '2026-09-15T14:00:00.000Z', runId: null, evidence: null }, t0);
+  assert.equal(getActiveWindow('session', t0)!.endsAt, '2026-09-15T14:00:00.000Z');
+
+  // The observation table's earliest-wins answer is the earlier one. Quoting
+  // that would have the gauge announce 13:00 while the guard went on refusing
+  // runs until 14:00 — somebody waiting for the time on screen finds the quota
+  // still shut.
+  assert.equal(getKnownResetAt('session', t0), '2026-09-15T13:00:00.000Z');
+  assert.equal(getQuotaState(t0).session.resetsAt, '2026-09-15T14:00:00.000Z');
+
+  // These tests share one database, and an observation dated later than a
+  // following test's clock would hold that test's trigger to a reset it never
+  // set up. Take this one's back out rather than leave it lying in the way.
+  db.prepare("DELETE FROM quota_resets WHERE reset_at LIKE '2026-09-15%'").run();
+  db.prepare("DELETE FROM usage_windows WHERE started_at LIKE '2026-09-15%'").run();
 });
 
 test('a reset already in the past is not recorded', () => {

@@ -373,9 +373,6 @@ function slice(
 ): QuotaSlice {
   const window = getActiveWindow(kind, at);
   const used = window ? budgetedTokens(window, basis) : 0;
-  // With no window open the allowance is already back, so a pending observation
-  // is the next reset rather than this one — hence only the open window's end.
-  const known = window ? getKnownResetAt(kind, at) : null;
   const effectiveBudget = budget > 0 ? Math.max(0, Math.floor(budget * (1 - reservePct / 100))) : 0;
   const remaining = effectiveBudget > 0 ? Math.max(0, effectiveBudget - used) : null;
   const remainingPct =
@@ -388,8 +385,21 @@ function slice(
     budget: effectiveBudget,
     remaining,
     remainingPct,
-    resetsAt: known ?? window?.endsAt ?? null,
-    resetsAtObserved: known !== null || (window?.endsAtObserved ?? false),
+    /*
+     * The open window's own end, and nothing else. `recordQuotaReset` already
+     * folds every observation into it, and `getActiveWindow` keys on it to
+     * decide the window is still open — so it is the value that actually
+     * decides whether a run may start.
+     *
+     * Consulting the observation table separately used to disagree with it:
+     * that lookup returns the *earliest* still-future reset while the window
+     * holds the *latest* one written, so with two live observations the gauge
+     * announced a reset at the earlier time while the guard went on refusing
+     * runs until the later one. Somebody waiting for the time on screen found
+     * the quota still closed.
+     */
+    resetsAt: window?.endsAt ?? null,
+    resetsAtObserved: window?.endsAtObserved ?? false,
     fresh: window === null,
     exhausted: remaining !== null && remaining <= 0,
   };
