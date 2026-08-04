@@ -163,6 +163,75 @@ test('a database that already has a schema is copied before it is migrated', asy
   assert.equal(errorStore.countErrors(), 0);
 });
 
+test('the durations restarts used to leave behind are worked out from the timestamps', () => {
+  const prompt = makePrompt();
+  const run = runStore.createRun({
+    promptId: prompt.id,
+    promptName: prompt.name,
+    triggerId: null,
+    triggerType: 'manual',
+    promptText: 'work',
+  });
+
+  // A row as older instances left it: closed out by a restart, both timestamps
+  // written, and no duration — which the run pages render as a dash and the
+  // dashboard's SUM skips entirely.
+  db.prepare(
+    `UPDATE runs SET status = 'failed', completion_reason = 'restart', duration_ms = NULL,
+       started_at = '2026-08-04T07:48:21.341Z', finished_at = '2026-08-04T07:48:48.033Z'
+     WHERE id = ?`,
+  ).run(run.id);
+
+  // Put the database back one migration, the way an older instance would be.
+  db.prepare("DELETE FROM schema_migrations WHERE name = '011_backfill_interrupted_durations'").run();
+  migrate();
+
+  // 26.692 seconds, recovered exactly rather than estimated. SQLite works this
+  // out in floating-point days, so allow it the odd millisecond.
+  const repaired = runStore.getRun(run.id)!;
+  assert.ok(repaired.durationMs !== null, 'the backfill should have filled this in');
+  assert.ok(
+    Math.abs(repaired.durationMs - 26_692) <= 2,
+    `expected about 26692ms, got ${repaired.durationMs}`,
+  );
+});
+
+test('the backfill leaves alone what it has no business touching', () => {
+  const prompt = makePrompt();
+  const make = (patch: string) => {
+    const run = runStore.createRun({
+      promptId: prompt.id,
+      promptName: prompt.name,
+      triggerId: null,
+      triggerType: 'manual',
+      promptText: 'work',
+    });
+    db.prepare(`UPDATE runs SET ${patch} WHERE id = ?`).run(run.id);
+    return run.id;
+  };
+
+  // A duration the queue already recorded, on a restart row: not the
+  // backfill's to overwrite.
+  const recorded = make(
+    "completion_reason = 'restart', duration_ms = 999, " +
+      "started_at = '2026-08-04T07:48:21.341Z', finished_at = '2026-08-04T07:48:48.033Z'",
+  );
+  // A run that never started, where having no duration is the honest answer.
+  const neverStarted = make("completion_reason = 'restart', duration_ms = NULL, started_at = NULL");
+  // And an ordinary failure, which is not a restart at all.
+  const ordinaryFailure = make(
+    "status = 'failed', completion_reason = NULL, duration_ms = NULL, " +
+      "started_at = '2026-08-04T07:48:21.341Z', finished_at = '2026-08-04T07:48:48.033Z'",
+  );
+
+  db.prepare("DELETE FROM schema_migrations WHERE name = '011_backfill_interrupted_durations'").run();
+  migrate();
+
+  assert.equal(runStore.getRun(recorded)!.durationMs, 999);
+  assert.equal(runStore.getRun(neverStarted)!.durationMs, null);
+  assert.equal(runStore.getRun(ordinaryFailure)!.durationMs, null);
+});
+
 // --------------------------------------------------------------------------
 // The error feed
 // --------------------------------------------------------------------------

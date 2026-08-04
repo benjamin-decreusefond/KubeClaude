@@ -391,6 +391,31 @@ const MIGRATIONS: Array<{ name: string; up: string }> = [
       ALTER TABLE triggers ADD COLUMN webhook_token TEXT;
     `,
   },
+  {
+    name: '011_backfill_interrupted_durations',
+    up: `
+      /*
+       * Until recently a run closed out by a restart was given a finished_at and
+       * no duration. Null is not read as "unknown" anywhere it lands: the run
+       * pages render a dash, as though it took no time, and the dashboard's
+       * wall-clock figure is a SUM over the column, which skips nulls outright.
+       * The runs a restart catches are the ones that were still going, so the
+       * total was missing precisely the longest work.
+       *
+       * Both timestamps are on the row, so the elapsed time is recoverable
+       * exactly rather than estimated. Scoped to the restart rows with a
+       * started_at and no duration: a run that legitimately has none — one that
+       * never started — is left alone, and so is every run whose duration the
+       * queue already recorded.
+       */
+      UPDATE runs
+         SET duration_ms = CAST((julianday(finished_at) - julianday(started_at)) * 86400000 AS INTEGER)
+       WHERE completion_reason = 'restart'
+         AND duration_ms IS NULL
+         AND started_at IS NOT NULL
+         AND finished_at IS NOT NULL;
+    `,
+  },
 ];
 
 export function migrate(): void {
