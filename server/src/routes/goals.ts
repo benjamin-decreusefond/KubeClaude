@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { iterationReportInstruction, isAchieved, startIteration } from '../goals.js';
+import { clearFailureStreak, iterationReportInstruction, isAchieved, startIteration } from '../goals.js';
 import { cancelRun, cancelRunsForPrompt } from '../queue.js';
 import * as goalStore from '../store/goals.js';
 import * as promptStore from '../store/prompts.js';
@@ -241,6 +241,9 @@ export async function goalRoutes(app: FastifyInstance): Promise<void> {
     // Reaching its limit is what stopped it, so restarting has to lift the limit.
     const clearedLimit =
       goal.maxIterations > 0 && goal.iteration >= goal.maxIterations ? { maxIterations: 0 } : {};
+    // Same reasoning for the other thing that stops a goal: leaving the failed
+    // run behind means the next sweep counts it again and pauses it right back.
+    clearFailureStreak(goal);
     return goalView(
       goalStore.updateGoal(id, { status: 'active', ...clearedLimit })!,
       promptStore.getPrompt(goal.promptId),

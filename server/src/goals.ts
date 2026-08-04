@@ -52,6 +52,16 @@ const BLIND_QUOTA_RETRY_MINUTES = 30;
  */
 const INTERRUPTED = 'interrupted';
 
+/**
+ * What the log calls the line a resume leaves behind. Deliberately not a fatal
+ * status: `consecutiveFailures` walks back from the newest entry and stops at
+ * the first thing that is not a failure, so this marker is what actually clears
+ * a streak. Without it, resuming a goal that three failures had paused put it
+ * straight back into the same three failures and paused it again on the next
+ * tick — the button looked broken because nothing it did could survive a sweep.
+ */
+const RESUMED = 'resumed';
+
 /** How many consecutive fruitless iterations are tolerated before giving up. */
 const MAX_CONSECUTIVE_FAILURES = 3;
 
@@ -426,6 +436,27 @@ export function startIteration(goal: Goal, triggerType = 'goal'): Run | null {
  */
 export function isAchieved(goal: Goal): boolean {
   return goal.objectives.length > 0 && goal.objectives.every((objective) => objective.done && !objective.continuous);
+}
+
+/**
+ * Draw a line under whatever paused this goal, so the loop judges it on what it
+ * does next rather than on what it already did. A no-op when there is no streak
+ * to clear, which keeps the progress log free of a line per idle Resume click.
+ *
+ * Returns true when it actually wrote one.
+ */
+export function clearFailureStreak(goal: Goal): boolean {
+  if (consecutiveFailures(goal.id) === 0) return false;
+  goalStore.addIteration({
+    goalId: goal.id,
+    runId: null,
+    summary: 'Resumed by hand, after the loop had paused this goal.',
+    nextStep: null,
+    achieved: [],
+    source: 'none',
+    runStatus: RESUMED,
+  });
+  return true;
 }
 
 /**

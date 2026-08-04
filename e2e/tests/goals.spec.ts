@@ -73,6 +73,35 @@ test('an objective can be made standing, and then nothing can tick it', async ({
   expectNoPageErrors(consoleErrors);
 });
 
+test('an objective can be removed, and the mission and cadence edited', async ({
+  page,
+  consoleErrors,
+}) => {
+  await page.goto('/goals');
+  await page.getByRole('heading', { name: NAME }).click();
+
+  page.once('dialog', (dialog) => void dialog.accept());
+  await page
+    .getByRole('row')
+    .filter({ hasText: 'Alerts fire before users notice' })
+    .getByRole('button', { name: 'Remove' })
+    .click();
+  await expect(page.getByText('Alerts fire before users notice')).toHaveCount(0);
+  await expect(page.getByText('1 of 2 done', { exact: false })).toBeVisible();
+
+  // The mission and the cadence live behind Edit, in the header with everything
+  // else you do to a goal.
+  await page.getByRole('button', { name: 'Edit' }).click();
+  await page.getByLabel('Mission', { exact: true }).fill('Keep the e2e namespace greener');
+  await page.getByLabel('Wait between iterations (minutes)').fill('45');
+  await page.getByRole('heading', { name: NAME }).click();
+
+  await page.reload();
+  await expect(page.getByText('Keep the e2e namespace greener')).toBeVisible();
+  await expect(page.getByText('every 45 min', { exact: false }).first()).toBeVisible();
+  expectNoPageErrors(consoleErrors);
+});
+
 test('the progress log fills in once an iteration has been reviewed', async ({ page, consoleErrors }) => {
   await page.goto('/goals');
   await page.getByRole('heading', { name: NAME }).click();
