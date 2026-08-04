@@ -7,6 +7,16 @@ export interface PeriodTotals {
   runs: number;
   succeeded: number;
   failed: number;
+  /**
+   * Runs a KubeClaude restart cut short, kept out of `failed` and counted here
+   * instead. A deploy or a node drain is not the task failing, and
+   * `RESTART_REASON` exists so the rest of the app can tell the two apart — the
+   * goal loop already refuses to hold one against a goal. Counted as failures,
+   * they made the one number on the overview that says how the work is going
+   * read as though a third of it were broken, on an instance whose only crime
+   * is redeploying often.
+   */
+  interrupted: number;
   rateLimited: number;
   inputTokens: number;
   outputTokens: number;
@@ -23,6 +33,7 @@ interface TotalsRow {
   runs: number | null;
   succeeded: number | null;
   failed: number | null;
+  interrupted: number | null;
   rate_limited: number | null;
   input_tokens: number | null;
   output_tokens: number | null;
@@ -39,7 +50,9 @@ const TOTALS_SELECT = `
   SELECT
     COUNT(*) AS runs,
     SUM(CASE WHEN status = 'succeeded' THEN 1 ELSE 0 END) AS succeeded,
-    SUM(CASE WHEN status IN ('failed', 'timeout') THEN 1 ELSE 0 END) AS failed,
+    SUM(CASE WHEN status IN ('failed', 'timeout') AND COALESCE(completion_reason, '') != 'restart'
+             THEN 1 ELSE 0 END) AS failed,
+    SUM(CASE WHEN status = 'failed' AND completion_reason = 'restart' THEN 1 ELSE 0 END) AS interrupted,
     SUM(CASE WHEN status = 'rate_limited' THEN 1 ELSE 0 END) AS rate_limited,
     SUM(input_tokens) AS input_tokens,
     SUM(output_tokens) AS output_tokens,
@@ -58,6 +71,7 @@ function toTotals(row: TotalsRow | undefined): PeriodTotals {
     runs: row?.runs ?? 0,
     succeeded: row?.succeeded ?? 0,
     failed: row?.failed ?? 0,
+    interrupted: row?.interrupted ?? 0,
     rateLimited: row?.rate_limited ?? 0,
     inputTokens: row?.input_tokens ?? 0,
     outputTokens: row?.output_tokens ?? 0,

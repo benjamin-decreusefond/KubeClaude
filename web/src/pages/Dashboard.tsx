@@ -123,7 +123,16 @@ export function Dashboard() {
             value={`${totals.month.succeeded}/${totals.month.runs}`}
             note={
               totals.month.runs > 0
-                ? `${totals.month.failed} failed · ${totals.month.rateLimited} stopped on quota`
+                ? [
+                    `${totals.month.failed} failed`,
+                    `${totals.month.rateLimited} stopped on quota`,
+                    // Only when there are any: on an instance that is not
+                    // redeployed mid-run this is always zero, and a permanent
+                    // "0 interrupted" is noise.
+                    ...(totals.month.interrupted > 0
+                      ? [`${totals.month.interrupted} cut short by a restart`]
+                      : []),
+                  ].join(' · ')
                 : 'No runs yet'
             }
           />
