@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { Link, NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { api, getToken, setToken } from './api';
 import { usePolled, useTheme } from './hooks';
 import { Agents } from './pages/Agents';
@@ -39,7 +39,8 @@ export function App({ auth, onAuthChanged }: { auth: AuthState; onAuthChanged: (
   return (
     <div className="app">
       <aside className="sidebar">
-        <div className="brand">
+        {/* The wordmark is the way back to the overview, as it is everywhere else. */}
+        <Link className="brand" to="/">
           <div className="brand-mark" aria-hidden>
             <BrandMark />
           </div>
@@ -47,7 +48,7 @@ export function App({ auth, onAuthChanged }: { auth: AuthState; onAuthChanged: (
             <div className="brand-name">KubeClaude</div>
             <div className="brand-sub">Claude Code, on a schedule</div>
           </div>
-        </div>
+        </Link>
 
         <nav className="nav">
           <NavLink to="/" end>

@@ -209,11 +209,25 @@ pre {
   overflow-y: auto;
 }
 
+/* A link to the overview, but styled as the wordmark it is rather than as a
+   link — bar the hover, which is what says it is clickable at all. */
 .brand {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 0 8px;
+  color: inherit;
+  text-decoration: none;
+  border-radius: 10px;
+}
+
+.brand:hover .brand-name {
+  color: var(--accent);
+}
+
+.brand:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .brand-mark {

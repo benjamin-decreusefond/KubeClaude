@@ -613,7 +613,7 @@ test('a goal is created with its objectives and its own hidden prompt', async ()
   const goal = created.json<{
     id: string;
     objectives: Array<{ id: string; text: string }>;
-    progress: { done: number; total: number };
+    progress: { done: number; total: number; standing: number };
     prompt: { id: string; kind: string; continueSession: boolean; appendSystemPrompt: string };
   }>();
   goalId = goal.id;
@@ -624,7 +624,7 @@ test('a goal is created with its objectives and its own hidden prompt', async ()
     goal.objectives.map((objective) => objective.id),
     ['o1', 'o2'],
   );
-  assert.deepEqual(goal.progress, { done: 0, total: 2 });
+  assert.deepEqual(goal.progress, { done: 0, total: 2, standing: 0 });
 
   // The prompt behind it is what makes iterations one continuing session.
   assert.equal(goal.prompt.kind, 'goal');
@@ -690,6 +690,45 @@ test('an unrelated edit does not clobber an objective ticked while the request w
   // The rename must not have rewritten objectives from the stale snapshot it
   // read before the tick landed.
   assert.equal(body.objectives.find((o) => o.id === goal.objectives[0]!.id)?.done, true);
+
+  await kube.request({ method: 'DELETE', url: `/api/goals/${goal.id}` });
+});
+
+test('standing objectives are created as such and never end the goal', async () => {
+  const created = await kube.request({
+    method: 'POST',
+    url: '/api/goals',
+    payload: {
+      name: 'Keep it safe',
+      description: '',
+      objectives: ['Keep it secure'],
+      continuousObjectives: true,
+      startNow: false,
+    },
+  });
+  const goal = created.json<{
+    id: string;
+    objectives: Array<{ id: string; continuous: boolean }>;
+    progress: { total: number; standing: number };
+  }>();
+  assert.equal(goal.objectives[0]?.continuous, true);
+  // A standing objective is not part of the bar it can never fill.
+  assert.deepEqual(goal.progress, { done: 0, total: 0, standing: 1 });
+
+  // Even ticked by hand, it must not end the goal the way a closable one does.
+  const ticked = await kube.request({
+    method: 'PATCH',
+    url: `/api/goals/${goal.id}`,
+    payload: {
+      objectives: goal.objectives.map((objective) => ({
+        ...objective,
+        done: true,
+        doneAt: new Date().toISOString(),
+        note: 'Marked by hand',
+      })),
+    },
+  });
+  assert.equal(ticked.json<{ status: string }>().status, 'active');
 
   await kube.request({ method: 'DELETE', url: `/api/goals/${goal.id}` });
 });

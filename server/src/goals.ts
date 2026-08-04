@@ -3,7 +3,7 @@ import { enqueueRun } from './queue.js';
 import { transcriptOf } from './claude/completion.js';
 import { runOneShot } from './claude/runner.js';
 import * as goalStore from './store/goals.js';
-import { getPrompt } from './store/prompts.js';
+import { getPrompt, updatePrompt } from './store/prompts.js';
 import * as runs from './store/runs.js';
 import { RESTART_REASON } from './store/runs.js';
 import { getQuotaState } from './store/usage.js';
@@ -55,20 +55,35 @@ const CONTEXT_ITERATIONS = 5;
  */
 export function iterationReportInstruction(): string {
   return (
-    'You are working on a long-running goal, one iteration at a time. End every response with a ' +
-    'report in exactly this shape, as the last thing you write:\n\n' +
+    'You are working on a long-running goal, one iteration at a time. An iteration is a working ' +
+    'session, not a single step: keep working until the thread you picked up is actually finished ' +
+    'or you are genuinely blocked. End every response with a report in exactly this shape, as the ' +
+    'last thing you write:\n\n' +
     'PROGRESS: what you actually changed or learned this iteration, in two or three sentences.\n' +
     'DONE: the ids of the objectives you completed this iteration, comma separated, or none.\n' +
     'NEXT: the single most valuable thing the next iteration should do.\n\n' +
     'Only list an objective under DONE when it is genuinely finished and verified — a later ' +
-    'iteration will not revisit it. Never invent an objective id that was not given to you.'
+    'iteration will not revisit it. Never invent an objective id that was not given to you, and ' +
+    'never list a standing objective: those are missions to keep working at, not boxes to tick.'
   );
 }
 
 function objectiveLine(objective: Objective): string {
+  if (objective.continuous) return `- [~] ${objective.id}: ${objective.text} (standing)`;
   const box = objective.done ? '[x]' : '[ ]';
   const note = objective.done && objective.note ? ` — ${objective.note}` : '';
   return `- ${box} ${objective.id}: ${objective.text}${note}`;
+}
+
+/**
+ * Why stopping early costs something, in the goal's own numbers. An iteration
+ * that ends on "waiting for CI" does not resume when CI finishes — it resumes
+ * when the cadence says so, which is the part worth spelling out.
+ */
+function cadenceSentence(goal: Goal): string {
+  const minutes = Math.max(0, goal.cadenceMinutes);
+  if (minutes === 0) return 'nothing else happens on this goal until the next iteration starts.';
+  return `nothing else happens on this goal for the next ${minutes} minutes.`;
 }
 
 /** The message an iteration is started with. */
@@ -78,8 +93,15 @@ export function buildIterationPrompt(goal: Goal, history: GoalIteration[]): stri
 
   if (goal.objectives.length > 0) {
     const open = goal.objectives.filter((objective) => !objective.done);
+    const standing = goal.objectives.some((objective) => objective.continuous);
     parts.push(
       ['## Objectives', ...goal.objectives.map(objectiveLine)].join('\n') +
+        (standing
+          ? '\n\nThe ones marked [~] are standing: no amount of work finishes them, so never ' +
+            'report them under DONE. They are what you keep coming back to once the closable ' +
+            'objectives are out of the way — each iteration should push them further, not ' +
+            'declare them met.'
+          : '') +
         (open.length === 0
           ? '\n\nEvery objective is ticked. Look for what would genuinely improve on this, or ' +
             'report that there is nothing left worth doing.'
@@ -109,9 +131,16 @@ export function buildIterationPrompt(goal: Goal, history: GoalIteration[]): stri
 
   parts.push(
     `## This iteration (#${goal.iteration + 1})\n` +
-      'Do one meaningful unit of work towards the goal and carry it through to something real — ' +
-      'a change made, a check run, a finding confirmed. Verify it before you claim it. Do not ' +
-      'redo work an earlier iteration already finished. Then write the report.',
+      'This is a working session, not a single step. Pick up the most valuable thread and carry ' +
+      'it all the way through — found, fixed, tested, verified, landed — and when it is genuinely ' +
+      'finished, start the next one. Verify what you claim before you claim it, and do not redo ' +
+      'work an earlier iteration already finished.\n\n' +
+      'Stop only when there is nothing left you can usefully do, or when you are blocked on ' +
+      'something a human has to decide. Waiting on something external — a build, a check, a ' +
+      'deployment — is not being blocked: wait for it and finish the job, or do other useful work ' +
+      "while it runs. Ending the session parked on \"now I wait\" wastes the iteration, because " +
+      `${cadenceSentence(goal)} A one-line confirmation is not an iteration's worth of work.\n\n` +
+      'Then write the report.',
   );
 
   return parts.join('\n\n');
@@ -215,11 +244,17 @@ async function judgeIteration(goal: Goal, run: Run): Promise<IterationReport | n
  * Match what the model claimed against the objectives it was given, by id or by
  * the objective's own text. Anything else it named is dropped: a goal must not
  * be able to tick a box that was never on the list.
+ *
+ * Standing objectives are not on the list for this purpose. "Keep it secure" is
+ * never finished, and an iteration that fixed three security bugs will honestly
+ * believe it just met that objective — which would tick it, drop it out of the
+ * open set, and leave the loop with nothing to aim at.
  */
 function resolveAchieved(goal: Goal, claimed: string[]): string[] {
-  const byId = new Map(goal.objectives.map((objective) => [objective.id.toLowerCase(), objective.id]));
+  const closable = goal.objectives.filter((objective) => !objective.continuous);
+  const byId = new Map(closable.map((objective) => [objective.id.toLowerCase(), objective.id]));
   const byText = new Map(
-    goal.objectives.map((objective) => [objective.text.trim().toLowerCase(), objective.id]),
+    closable.map((objective) => [objective.text.trim().toLowerCase(), objective.id]),
   );
   const resolved = new Set<string>();
   for (const claim of claimed) {
@@ -288,6 +323,15 @@ export function startIteration(goal: Goal, triggerType = 'goal'): Run | null {
   if (!prompt) return null;
   if (runs.hasActiveRunForPrompt(prompt.id)) return null;
 
+  // The report instruction is written into the prompt when the goal is created,
+  // so a goal made before this wording changed would keep the old one forever.
+  // Nothing else may edit it — goals do not expose `appendSystemPrompt` — so
+  // overwriting it here cannot clobber anybody's own text.
+  const instruction = iterationReportInstruction();
+  if (prompt.appendSystemPrompt !== instruction) {
+    updatePrompt(prompt.id, { appendSystemPrompt: instruction });
+  }
+
   const promptText = buildIterationPrompt(goal, goalStore.listIterations(goal.id, CONTEXT_ITERATIONS));
   const run = enqueueRun({
     promptId: prompt.id,
@@ -304,9 +348,13 @@ export function startIteration(goal: Goal, triggerType = 'goal'): Run | null {
   return run;
 }
 
-/** True once every objective is ticked; a goal with no objectives never is. */
+/**
+ * True once every objective is ticked; a goal with no objectives never is, and
+ * neither is one carrying a standing objective — that is the whole point of
+ * marking one, so a hand-ticked box must not end the goal either.
+ */
 export function isAchieved(goal: Goal): boolean {
-  return goal.objectives.length > 0 && goal.objectives.every((objective) => objective.done);
+  return goal.objectives.length > 0 && goal.objectives.every((objective) => objective.done && !objective.continuous);
 }
 
 /** How many iterations in a row ended without producing anything usable. */

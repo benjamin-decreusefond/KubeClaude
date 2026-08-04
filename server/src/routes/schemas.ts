@@ -309,6 +309,11 @@ export const goalCreateSchema = goalPromptSchema.extend({
   description: z.string().max(20_000).default(''),
   /** One objective per entry; blank entries are dropped. */
   objectives: z.array(z.string().max(2000)).max(100).default([]),
+  /**
+   * Mark every objective above as standing: a mission the goal keeps working at
+   * rather than a box any one iteration can tick.
+   */
+  continuousObjectives: z.boolean().default(false),
   cadenceMinutes: z.number().int().min(0).max(100_000).default(30),
   maxIterations: z.number().int().min(0).max(10_000).default(0),
   stopWhenAchieved: z.boolean().default(true),
@@ -325,6 +330,8 @@ export const objectiveSchema = z.object({
   done: z.boolean(),
   doneAt: z.string().nullable(),
   note: z.string().max(2000).nullable(),
+  /** Absent on goals stored before standing objectives existed. */
+  continuous: z.boolean().default(false),
 });
 
 export const goalUpdateSchema = goalPromptSchema.partial().extend({
@@ -333,6 +340,8 @@ export const goalUpdateSchema = goalPromptSchema.partial().extend({
   objectives: z.array(objectiveSchema).max(100).optional(),
   /** Extra objectives, appended with fresh ids. */
   addObjectives: z.array(z.string().max(2000)).max(100).optional(),
+  /** Whether those extra objectives are standing ones. */
+  addObjectivesContinuous: z.boolean().optional(),
   status: z.enum(['active', 'paused', 'achieved', 'abandoned']).optional(),
   cadenceMinutes: z.number().int().min(0).max(100_000).optional(),
   maxIterations: z.number().int().min(0).max(10_000).optional(),

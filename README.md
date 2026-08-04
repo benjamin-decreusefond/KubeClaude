@@ -304,9 +304,19 @@ every iteration reads), **objectives** (one line each, ticked off as they close 
 the list empty and the goal is open-ended), a **cadence**, and optionally an **iteration
 limit** so an unattended goal cannot run forever.
 
+An objective can be **standing**: a mission like "keep it secure" or "keep it free of
+bugs" that no amount of work ever finishes. Nothing ticks one off — not an iteration, not
+the checkbox — so the goal keeps pushing at it instead of declaring it met after the first
+round of fixes and then drifting. Tick the box on the new-goal form to create them that
+way, or flip an existing objective between standing and closable from the goal's page.
+
 Each iteration is handed the mission, the objectives with their current state, and a
-digest of what the last few iterations did. It is asked to do *one* meaningful unit of
-work — carried through to something real and verified — and to end with a report:
+digest of what the last few iterations did. An iteration is a working *session*, not a
+step: it is asked to carry a thread all the way through — found, fixed, tested, verified,
+landed — and then start the next one, stopping only when there is nothing useful left or a
+human has to decide something. Waiting on a build or a deploy is not being blocked, since
+nothing else happens on the goal until the cadence comes round again. It ends with a
+report:
 
 ```
 PROGRESS: Added a backoff to the client and covered it with a test.
@@ -323,7 +333,7 @@ How it ends:
 
 | Situation | What happens |
 |---|---|
-| Every objective ticked | `achieved`, unless you turned off "stop when achieved" — then it keeps iterating and improving. |
+| Every objective ticked | `achieved`, unless you turned off "stop when achieved" — then it keeps iterating and improving. A goal carrying a standing objective never gets here. |
 | Iteration limit reached | `abandoned`. Resuming lifts the limit. |
 | Three failed or timed-out iterations in a row | Paused automatically. Something is wrong with the setup, and looping would spend the budget reproducing it. A restart of KubeClaude itself does **not** count — a deploy or a node drain is not the task failing. |
 | Quota ran out mid-iteration | Nothing special: the run parks as `rate_limited` and auto-resume finishes that iteration before the loop moves on. |

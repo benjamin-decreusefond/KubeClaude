@@ -26,7 +26,12 @@ function toGoal(row: GoalRow): Goal {
     promptId: row.prompt_id,
     name: row.name,
     description: row.description,
-    objectives: jsonFromDb<Objective[]>(row.objectives, []),
+    // Goals stored before standing objectives existed have no `continuous` in
+    // their JSON; reading it as false here keeps every consumer off `?? false`.
+    objectives: jsonFromDb<Objective[]>(row.objectives, []).map((objective) => ({
+      ...objective,
+      continuous: Boolean(objective.continuous),
+    })),
     status: row.status as GoalStatus,
     cadenceMinutes: row.cadence_minutes,
     maxIterations: row.max_iterations,
@@ -41,7 +46,11 @@ function toGoal(row: GoalRow): Goal {
 }
 
 /** Objective ids are positional and never reused, so the log keeps making sense. */
-export function makeObjectives(texts: string[], existing: Objective[] = []): Objective[] {
+export function makeObjectives(
+  texts: string[],
+  existing: Objective[] = [],
+  continuous = false,
+): Objective[] {
   const taken = new Set(existing.map((objective) => objective.id));
   let next = existing.length + 1;
   const freshId = (): string => {
@@ -52,7 +61,7 @@ export function makeObjectives(texts: string[], existing: Objective[] = []): Obj
   return texts
     .map((text) => text.trim())
     .filter((text) => text.length > 0)
-    .map((text) => ({ id: freshId(), text, done: false, doneAt: null, note: null }));
+    .map((text) => ({ id: freshId(), text, done: false, doneAt: null, note: null, continuous }));
 }
 
 export interface GoalInput {
@@ -173,7 +182,9 @@ export function tickObjectives(id: string, achieved: string[], note: string): Go
     const now = new Date().toISOString();
     const trimmed = note.trim();
     const objectives = current.objectives.map((objective) =>
-      achieved.includes(objective.id) && !objective.done
+      // A standing objective is never finished, so nothing may close it — not
+      // even an iteration that genuinely did good work against it.
+      achieved.includes(objective.id) && !objective.done && !objective.continuous
         ? {
             ...objective,
             done: true,
