@@ -96,6 +96,29 @@ test('a reset already in the past is not recorded', () => {
   assert.equal(recordQuotaReset({ kind: 'session', resetAt: 'not a date', runId: null, evidence: null }, now), null);
 });
 
+test('a reset days out cannot pin the five-hour window open', () => {
+  const now = new Date('2026-09-20T10:00:00Z');
+  const windows = openWindows(now);
+
+  // What a weekly limit looks like arriving mislabelled: most limit wordings
+  // do not name a scope, so the caller guesses `session`, and three days is
+  // not something a five-hour allowance can do.
+  const refused = recordQuotaReset(
+    { kind: 'session', resetAt: '2026-09-23T10:00:00.000Z', runId: null, evidence: 'usage limit reached' },
+    now,
+  );
+  assert.equal(refused, null);
+
+  // The window keeps the end it worked out for itself, rather than being held
+  // open for three days with every run's spend piling into it.
+  const active = getActiveWindow('session', now)!;
+  assert.equal(active.id, windows.session.id);
+  assert.equal(active.endsAt, '2026-09-20T15:00:00.000Z');
+  assert.equal(active.endsAtObserved, false);
+  // And nothing was left behind for the next window to inherit either.
+  assert.equal(getKnownResetAt('session', now), null);
+});
+
 test('the nearest still-future observation is the one that counts', () => {
   const now = new Date('2026-09-03T10:00:00Z');
   recordQuotaReset({ kind: 'weekly', resetAt: '2026-09-06T00:00:00.000Z', runId: null, evidence: null }, now);

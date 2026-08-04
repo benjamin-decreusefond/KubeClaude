@@ -293,6 +293,10 @@ test('pruning runs leaves the progress log readable rather than pointing at noth
     runStatus: 'succeeded',
   });
 
+  // The goal also remembers this run as the one the next iteration continues.
+  goalStore.recordIterationStart(goal.id, run.id);
+  assert.equal(goalStore.getGoal(goal.id)?.lastRunId, run.id);
+
   // Age it past any retention window and prune.
   db.prepare("UPDATE runs SET queued_at = '2020-01-01T00:00:00.000Z' WHERE id = ?").run(run.id);
   assert.ok(runStore.pruneOldRuns(30) > 0);
@@ -301,6 +305,11 @@ test('pruning runs leaves the progress log readable rather than pointing at noth
   assert.equal(entry?.summary, 'Did something once');
   // The entry survives; the link to a run that no longer exists does not.
   assert.equal(entry?.runId, null);
+
+  // And the pointer the loop actually reads is cleared too. Left dangling, the
+  // next iteration would pass it as the run it continues, find no parent, and
+  // quietly start a second thread instead of carrying on the first.
+  assert.equal(goalStore.getGoal(goal.id)?.lastRunId, null);
 });
 
 test('a run whose prompt names a repository starts inside the checkout', async () => {
