@@ -308,7 +308,7 @@ test('a standing objective is never ticked off, however sincerely the iteration 
   assert.equal(after.status, 'active');
 });
 
-test('the iteration prompt marks standing objectives and asks for a session, not a step', () => {
+test('the iteration prompt marks standing objectives and caps the iteration at one change', () => {
   const { goal } = makeGoal({}, []);
   const updated = goalStore.updateGoal(goal.id, {
     objectives: goalStore.makeObjectives(['Keep it free of bugs'], [], true),
@@ -318,8 +318,9 @@ test('the iteration prompt marks standing objectives and asks for a session, not
   const text = buildIterationPrompt(updated, []);
   assert.match(text, /\[~\] o1: Keep it free of bugs \(standing\)/);
   assert.match(text, /never report them under DONE/);
-  // The depth instruction, and the concrete cost of stopping short of it.
-  assert.match(text, /working session, not a single step/);
+  // The scope rule, and the concrete cost of handing over half-landed work.
+  assert.match(text, /The unit of work is \*\*one landed change\*\*/);
+  assert.match(text, /Do not start a second change/);
   assert.match(text, /next 30 minutes/);
 });
 
@@ -343,7 +344,7 @@ test('the iteration is told to stop at a handover point, with the budget it has 
     { remainingPct: 62, resetsAt: '2026-08-04T13:10:00Z' } as never,
     now,
   );
-  assert.match(plenty, /stop at the first clean handover point/);
+  assert.match(plenty, /one landed change/);
   assert.match(plenty, /62% of the current token window is still free/);
   assert.match(plenty, /resets in about 3 hours/);
   assert.match(plenty, /not all of it/);
