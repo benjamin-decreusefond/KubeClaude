@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { api } from '../api';
+import { api, describeError } from '../api';
 import { Badge, Card, Empty, StatusBadge } from '../components/primitives';
 import { formatRelative, formatTokens, triggerLabel } from '../format';
 import { usePolled, useStream, useTicker } from '../hooks';
@@ -34,6 +34,19 @@ export function Prompts() {
     refresh();
   };
 
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  const importPrompt = async (file: File) => {
+    try {
+      const parsed = JSON.parse(await file.text()) as Partial<Prompt>;
+      const created = await api.createPrompt(parsed);
+      refresh();
+      navigate(`/prompts/${created.id}`);
+    } catch (error) {
+      setMessage(describeError(error));
+    }
+  };
+
   return (
     <div className="stack">
       <header className="page-head">
@@ -44,9 +57,25 @@ export function Prompts() {
             touch, and when it should fire.
           </p>
         </div>
-        <Link to="/prompts/new">
-          <button className="primary">New prompt</button>
-        </Link>
+        <div className="row">
+          <input
+            ref={fileInput}
+            type="file"
+            accept="application/json"
+            hidden
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = '';
+              if (file) void importPrompt(file);
+            }}
+          />
+          <button type="button" onClick={() => fileInput.current?.click()}>
+            Import
+          </button>
+          <Link to="/prompts/new">
+            <button className="primary">New prompt</button>
+          </Link>
+        </div>
       </header>
 
       {loading && !prompts && <Card>Loading…</Card>}

@@ -170,6 +170,18 @@ export function PromptEditor() {
     setMessage('Duplicated — triggers were not copied');
   };
 
+  const exportPrompt = async () => {
+    if (!id) return;
+    const portable = await api.exportPrompt(id);
+    const blob = new Blob([JSON.stringify(portable, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${(draft.name || 'prompt').replace(/[^A-Za-z0-9._-]+/g, '-')}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="stack">
       <header className="page-head">
@@ -188,6 +200,9 @@ export function PromptEditor() {
               </button>
               <button type="button" onClick={() => void duplicate()}>
                 Duplicate
+              </button>
+              <button type="button" onClick={() => void exportPrompt()}>
+                Export
               </button>
               <button type="button" className="danger" onClick={() => void remove()}>
                 Delete

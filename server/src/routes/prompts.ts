@@ -103,6 +103,34 @@ export async function promptRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(201).send(copy);
   });
 
+  /**
+   * The portable subset of a prompt's configuration — what `promptCreateSchema`
+   * accepts back, and nothing this instance's run history or database ids would
+   * make meaningless somewhere else. A file worth checking into a repo, sharing
+   * with somebody, or keeping as a backup outside this database entirely.
+   */
+  app.get('/api/prompts/:id/export', async (request, reply) => {
+    const { id } = idParams.parse(request.params);
+    const source = promptStore.getPrompt(id);
+    if (!source || source.kind !== 'scheduled') {
+      return reply.code(404).send({ error: 'Prompt not found' });
+    }
+
+    const {
+      id: _id,
+      createdAt: _createdAt,
+      updatedAt: _updatedAt,
+      lastSessionId: _lastSessionId,
+      kind: _kind,
+      title: _title,
+      ...portable
+    } = source;
+
+    const filename = `${source.name.replace(/[^A-Za-z0-9._-]+/g, '-').slice(0, 80) || 'prompt'}.json`;
+    reply.header('Content-Disposition', `attachment; filename="${filename}"`);
+    return reply.type('application/json').send(JSON.stringify(portable, null, 2));
+  });
+
   app.delete('/api/prompts/:id', async (request, reply) => {
     const { id } = idParams.parse(request.params);
     if (!promptStore.getPrompt(id)) return reply.code(404).send({ error: 'Prompt not found' });
