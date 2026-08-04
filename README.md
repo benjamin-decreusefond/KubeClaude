@@ -311,13 +311,18 @@ round of fixes and then drifting. Tick the box on the new-goal form to create th
 way, or flip an existing objective between standing and closable from the goal's page.
 
 Each iteration is handed the mission, the objectives with their current state, and a
-digest of what the last few iterations did. An iteration is a working *session*, not a
-step: it is asked to carry a thread all the way through — found, fixed, tested, verified,
-landed — and then stop at the first clean handover point. Waiting on a build or a deploy
-is not being blocked, since nothing else happens on the goal until the cadence comes round
-again; but working until the quota is gone is just as wrong, and when a token budget is
-configured the iteration is told how much of the window is left and asked to leave some of
-it. Whatever it did not get to goes in NEXT, and the same session picks it up next time.
+digest of what the last few iterations did. The unit of work is **one landed change**: it
+is asked to carry a single thread all the way through — found, fixed, tested, verified,
+merged, deployed if the goal deploys — and then stop, rather than starting a second one.
+That is the whole budget control that matters in practice; an iteration told to work until
+it runs out of things to do will empty a token window in one sitting. Waiting on a build or
+a deploy is not being blocked, since nothing else happens on the goal until the cadence
+comes round again. When a token budget is configured the iteration is also told how much of
+the window is left and when it resets. Whatever it did not get to goes in NEXT, and the
+same session picks it up next time.
+
+For a hard ceiling rather than an instruction, set **Run token cap** in Settings — but it
+kills the run on the turn that crosses it, mid-change, which is why it is off by default.
 It ends with a report:
 
 ```

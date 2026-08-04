@@ -75,10 +75,10 @@ const CONTEXT_ITERATIONS = 5;
  */
 export function iterationReportInstruction(): string {
   return (
-    'You are working on a long-running goal, one iteration at a time. An iteration is a working ' +
-    'session rather than a single step, but it is not unlimited either: carry the thread you ' +
-    'picked up through to a clean handover point, then hand over. End every response with a ' +
-    'report in exactly this shape, as the last thing you write:\n\n' +
+    'You are working on a long-running goal, one iteration at a time. An iteration is one ' +
+    'landed change, carried all the way through and then handed over — not a single step, and ' +
+    'not everything you can think of. End every response with a report in exactly this shape, ' +
+    'as the last thing you write:\n\n' +
     'PROGRESS: what you actually changed or learned this iteration, in two or three sentences.\n' +
     'DONE: the ids of the objectives you completed this iteration, comma separated, or none.\n' +
     'NEXT: the single most valuable thing the next iteration should do.\n\n' +
@@ -198,17 +198,19 @@ export function buildIterationPrompt(
 
   parts.push(
     `## This iteration (#${goal.iteration + 1})\n` +
-      'This is a working session, not a single step. Pick up the most valuable thread and carry ' +
-      'it all the way through — found, fixed, tested, verified, landed. Verify what you claim ' +
-      'before you claim it, and do not redo work an earlier iteration already finished. Waiting ' +
-      'on something external — a build, a check, a deployment — is not being blocked: wait for it ' +
-      'and finish the job rather than handing over something half-landed, because ' +
+      'The unit of work is **one landed change**. Pick the most valuable thread, carry it all ' +
+      'the way through — found, fixed, tested, verified, merged, and deployed if this goal ' +
+      'deploys — and then stop. Do not start a second change, however small or obvious the next ' +
+      'one looks: starting another is what empties a token window in a single sitting, and this ' +
+      'loop is meant to last.\n\n' +
+      'That one change still has to be real. A single check, or a line confirming what the last ' +
+      'iteration already did, is not an iteration’s work — if that is all that was ' +
+      'outstanding, finish it and then carry one change through. Verify what you claim before ' +
+      'you claim it, and do not redo work an earlier iteration already finished. Waiting on ' +
+      'something external — a build, a check, a deployment — is not being blocked: wait for it ' +
+      'rather than handing over something half-landed, because ' +
       `${cadenceSentence(goal)}\n\n` +
-      'Then stop at the first clean handover point — the work landed, nothing left dangling. ' +
-      'One or two threads carried through is an iteration. A single check or a one-line ' +
-      'confirmation is less than one; working until you run out of things to do, or out of ' +
-      'quota, is more than one, and this loop is meant to last. Whatever you did not get to ' +
-      'goes in NEXT, and the same session picks it up next time.',
+      'Whatever you did not get to goes in NEXT, and the same session picks it up next time.',
   );
 
   const budget = budgetSection(quota, now);
