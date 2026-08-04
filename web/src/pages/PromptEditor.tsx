@@ -163,6 +163,13 @@ export function PromptEditor() {
     navigate('/prompts');
   };
 
+  const duplicate = async () => {
+    if (!id) return;
+    const copy = await api.duplicatePrompt(id);
+    navigate(`/prompts/${copy.id}`);
+    setMessage('Duplicated — triggers were not copied');
+  };
+
   return (
     <div className="stack">
       <header className="page-head">
@@ -178,6 +185,9 @@ export function PromptEditor() {
             <>
               <button type="button" onClick={() => void runNow()}>
                 Run now
+              </button>
+              <button type="button" onClick={() => void duplicate()}>
+                Duplicate
               </button>
               <button type="button" className="danger" onClick={() => void remove()}>
                 Delete

@@ -21,6 +21,16 @@ const fileQuery = z.object({
   limit: z.coerce.number().int().min(1).max(50).default(20),
 });
 
+/** "Name (copy)", then "Name (copy 2)", "Name (copy 3)"… past the first collision. */
+function uniquePromptCopyName(name: string): string {
+  const base = `${name} (copy)`.slice(0, 120);
+  if (!promptStore.promptNameExists(base)) return base;
+  for (let n = 2; ; n += 1) {
+    const candidate = `${name} (copy ${n})`.slice(0, 120);
+    if (!promptStore.promptNameExists(candidate)) return candidate;
+  }
+}
+
 export async function promptRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/prompts', async () => {
     const prompts = promptStore.listPrompts();
@@ -73,6 +83,24 @@ export async function promptRoutes(app: FastifyInstance): Promise<void> {
       }
       throw error;
     }
+  });
+
+  /**
+   * A starting point for "like this one, but…" — the full configuration,
+   * none of the history. Triggers are deliberately not copied: two prompts
+   * both wired to the same schedule or the same webhook would fire twice for
+   * one event, which is never what duplicating a prompt is for.
+   */
+  app.post('/api/prompts/:id/duplicate', async (request, reply) => {
+    const { id } = idParams.parse(request.params);
+    const source = promptStore.getPrompt(id);
+    if (!source || source.kind !== 'scheduled') {
+      return reply.code(404).send({ error: 'Prompt not found' });
+    }
+
+    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, lastSessionId: _lastSessionId, ...rest } = source;
+    const copy = promptStore.createPrompt({ ...rest, name: uniquePromptCopyName(source.name) });
+    return reply.code(201).send(copy);
   });
 
   app.delete('/api/prompts/:id', async (request, reply) => {
