@@ -53,6 +53,26 @@ test('an objective can be added to a goal that is already running', async ({ pag
   expectNoPageErrors(consoleErrors);
 });
 
+test('an objective can be made standing, and then nothing can tick it', async ({ page, consoleErrors }) => {
+  await page.goto('/goals');
+  await page.getByRole('heading', { name: NAME }).click();
+
+  const row = page.getByRole('row').filter({ hasText: 'No pending PVC' });
+  await row.getByRole('button', { name: 'Standing' }).click();
+
+  const objective = page.getByRole('checkbox', { name: 'No pending PVC' });
+  await expect(objective).toBeDisabled();
+  // Out of the bar it could never fill, and counted on its own instead.
+  await expect(page.getByText('1 of 2 done', { exact: false })).toBeVisible();
+  await expect(page.getByText('1 standing', { exact: false }).first()).toBeVisible();
+
+  // And back again, so this is a choice rather than a trapdoor.
+  await row.getByRole('button', { name: 'Closable' }).click();
+  await expect(objective).toBeEnabled();
+  await expect(page.getByText('1 of 3 done', { exact: false })).toBeVisible();
+  expectNoPageErrors(consoleErrors);
+});
+
 test('the progress log fills in once an iteration has been reviewed', async ({ page, consoleErrors }) => {
   await page.goto('/goals');
   await page.getByRole('heading', { name: NAME }).click();
