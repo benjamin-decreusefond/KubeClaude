@@ -394,6 +394,8 @@ export interface PeriodTotals {
   runs: number;
   succeeded: number;
   failed: number;
+  /** Runs a KubeClaude restart cut short: a deploy or a drain, not a failure. */
+  interrupted: number;
   rateLimited: number;
   inputTokens: number;
   outputTokens: number;
