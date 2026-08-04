@@ -31,6 +31,11 @@ export async function buildServer(): Promise<FastifyInstance> {
     logger: false,
     bodyLimit: 4 * 1024 * 1024,
     trustProxy: config.trustProxy,
+    // Fastify's default only closes idle keep-alive sockets on `close()` — an
+    // SSE stream is neither idle nor ever going to close itself, so a single
+    // open browser tab would otherwise hang shutdown for the full termination
+    // grace period and force Kubernetes to SIGKILL instead.
+    forceCloseConnections: true,
   });
 
   /**
