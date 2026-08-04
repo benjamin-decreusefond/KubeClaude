@@ -30,6 +30,9 @@ export const DEFAULT_SETTINGS: Settings = {
   gitUserEmail: DEFAULT_GIT_IDENTITY.email,
   autoResumeEnabled: true,
   autoResumeDelayMinutes: 1,
+  notifyWebhookUrl: '',
+  notifyOnSuccess: false,
+  notifyOnFailure: true,
 };
 
 export function getSettings(): Settings {

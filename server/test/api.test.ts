@@ -788,6 +788,32 @@ test('settings round-trip and refuse values that would be nonsense', async () =>
   });
 });
 
+test('the notification webhook url is validated, and empty disables it', async () => {
+  const bad = await kube.request({
+    method: 'PATCH',
+    url: '/api/settings',
+    payload: { notifyWebhookUrl: 'not a url' },
+  });
+  assert.equal(bad.status, 400);
+
+  const set = await kube.request({
+    method: 'PATCH',
+    url: '/api/settings',
+    payload: { notifyWebhookUrl: 'https://hooks.example/incoming', notifyOnFailure: true, notifyOnSuccess: true },
+  });
+  assert.equal(set.status, 200);
+  assert.equal(set.json<{ notifyWebhookUrl: string }>().notifyWebhookUrl, 'https://hooks.example/incoming');
+
+  // Empty string is the deliberate "off" value, not a validation failure.
+  const cleared = await kube.request({
+    method: 'PATCH',
+    url: '/api/settings',
+    payload: { notifyWebhookUrl: '' },
+  });
+  assert.equal(cleared.status, 200);
+  assert.equal(cleared.json<{ notifyWebhookUrl: string }>().notifyWebhookUrl, '');
+});
+
 test('status reports the build, the quota and what the runs can reach', async () => {
   const status = await kube.request({ method: 'GET', url: '/api/status' });
   assert.equal(status.status, 200);

@@ -489,3 +489,30 @@ test('a run that never returns is killed at its timeout', async () => {
   assert.match(run.error ?? '', /Timed out/);
   delete process.env.FAKE_CLAUDE_MODE;
 });
+
+test('a finished run notifies the configured webhook, gated by outcome', async () => {
+  const realFetch = globalThis.fetch;
+  const calls: Array<{ url: string; body: unknown }> = [];
+  globalThis.fetch = ((url: string, init: RequestInit) => {
+    calls.push({ url, body: JSON.parse(init.body as string) });
+    return Promise.resolve(new Response('ok', { status: 200 }));
+  }) as typeof fetch;
+
+  try {
+    updateSettings({ notifyWebhookUrl: 'https://hooks.example/incoming', notifyOnSuccess: true, notifyOnFailure: true });
+
+    await waitForTerminal(enqueueRun({ promptId: makePrompt().id, triggerType: 'manual' })!.id);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0]!.url, 'https://hooks.example/incoming');
+    assert.equal((calls[0]!.body as { outcome: string }).outcome, 'success');
+
+    process.env.FAKE_CLAUDE_MODE = 'failure';
+    await waitForTerminal(enqueueRun({ promptId: makePrompt().id, triggerType: 'manual' })!.id);
+    delete process.env.FAKE_CLAUDE_MODE;
+    assert.equal(calls.length, 2);
+    assert.equal((calls[1]!.body as { outcome: string }).outcome, 'failure');
+  } finally {
+    globalThis.fetch = realFetch;
+    updateSettings({ notifyWebhookUrl: '', notifyOnSuccess: false, notifyOnFailure: true });
+  }
+});

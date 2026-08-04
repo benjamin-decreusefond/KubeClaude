@@ -369,6 +369,9 @@ export interface Settings {
   gitUserEmail: string;
   autoResumeEnabled: boolean;
   autoResumeDelayMinutes: number;
+  notifyWebhookUrl: string;
+  notifyOnSuccess: boolean;
+  notifyOnFailure: boolean;
 }
 
 export interface McpServer {
@@ -523,7 +526,7 @@ export interface ModelOption {
 }
 
 /** Where a recorded error came from. */
-export type ErrorSource = 'server' | 'browser' | 'run';
+export type ErrorSource = 'server' | 'browser' | 'run' | 'notify';
 
 /** One distinct fault, with how often it has happened since it first did. */
 export interface AppError {

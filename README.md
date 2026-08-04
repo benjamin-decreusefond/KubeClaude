@@ -77,6 +77,14 @@ component that can be down, for no capability you did not already have.
 merged into `--agents`. A prompt's own inline JSON wins on a name collision, the same
 precedence MCP connections use.
 
+**Notifications.** Point Settings → Notifications at a webhook URL — a Slack incoming
+webhook or any endpoint that takes JSON — and KubeClaude POSTs a summary when a run
+finishes: the prompt, the outcome, the cost, the error if there was one. On by default
+for failure, timeout, hitting a KubeClaude ceiling, or a rate limit with no auto-resume
+scheduled; off by default for success, since a run succeeding is the expected, quiet
+outcome. A target that is slow or unreachable never holds up the run queue — a failed
+delivery only ever reaches the error feed.
+
 ---
 
 ## Running it
