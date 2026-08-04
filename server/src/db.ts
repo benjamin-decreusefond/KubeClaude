@@ -434,14 +434,24 @@ const BACKUP_SUFFIX = '.db';
  * not.
  */
 function backupDatabase(nextMigration: string): void {
+  let file: string | null = null;
   try {
     fs.mkdirSync(config.backupsDir, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const file = path.join(config.backupsDir, `${BACKUP_PREFIX}${stamp}-before-${nextMigration}${BACKUP_SUFFIX}`);
+    file = path.join(config.backupsDir, `${BACKUP_PREFIX}${stamp}-before-${nextMigration}${BACKUP_SUFFIX}`);
     db.prepare('VACUUM INTO ?').run(file);
     pruneBackups();
     logger.info({ file, migration: nextMigration }, 'database backed up before migrating');
   } catch (error) {
+    /*
+     * A `VACUUM INTO` that runs out of disk part-way leaves the half-written
+     * target behind, and the backups directory defaults to the same volume as
+     * the database — so the disk filling up is exactly when this happens. Left
+     * there, that stub is indistinguishable from a real backup: it is listed as
+     * one, and it counts towards `backupsKept`, so a few failed migrations in a
+     * row would evict the last copy that could actually be restored.
+     */
+    if (file) fs.rmSync(file, { force: true });
     // Not fatal on its own: refusing to start because the backup failed would
     // turn "the disk is full" into an outage of its own. Loud, though — this is
     // the safety net going missing.
