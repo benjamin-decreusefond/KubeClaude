@@ -21,12 +21,34 @@ const STRING_LIMIT = 4_000;
 const TIGHT_STRING_LIMIT = 400;
 /** Longest array kept intact; the rest becomes one marker entry. */
 const ARRAY_LIMIT = 200;
-/** Deep enough for any stream-json message; a guard against cyclic input. */
+/**
+ * Deep enough for any stream-json message, and a bound on the recursion below.
+ * It never was the guard against cyclic input it once claimed to be: `bytes`
+ * runs first, and `JSON.stringify` throws on a cycle long before the recursion
+ * that this limits is reached. That is handled where it happens instead.
+ */
 const MAX_DEPTH = 12;
 
-function bytes(value: unknown): number {
-  const json = JSON.stringify(value ?? null);
-  return json === undefined ? 0 : Buffer.byteLength(json);
+/**
+ * How big this is once serialised, or null when it cannot be serialised at all.
+ *
+ * `JSON.stringify` throws on a cycle, on a BigInt, and on a `toJSON` that
+ * throws. `appendEvent` runs from a stream handler and is documented as never
+ * throwing — it returns null instead — so nothing on that path is allowed to,
+ * and reporting the failure is the only way to keep that true here.
+ */
+function bytes(value: unknown): number | null {
+  try {
+    const json = JSON.stringify(value ?? null);
+    return json === undefined ? 0 : Buffer.byteLength(json);
+  } catch {
+    return null;
+  }
+}
+
+/** A label worth keeping in the log; anything else is not worth risking. */
+function labelOf(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
 }
 
 function clampString(text: string, limit: number): string {
@@ -62,21 +84,35 @@ export function clampPayload(
   maxBytes: number = config.maxEventBytes,
 ): { payload: unknown; originalBytes: number; truncated: boolean } {
   const value = payload ?? null;
+  const record = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
+  // Only ever strings, so building the fallback cannot itself fail on whatever
+  // made the message unserialisable in the first place.
+  const labels = { type: labelOf(record.type), subtype: labelOf(record.subtype) };
+
   const originalBytes = bytes(value);
+  if (originalBytes === null) {
+    // Nothing here can be written down as it stands. Saying so keeps the run's
+    // log honest about the gap, where dropping the line would leave the output
+    // looking complete with a message quietly missing from the middle of it.
+    return {
+      payload: { ...labels, truncated: 'This message could not be serialised, so it was not stored.' },
+      originalBytes: 0,
+      truncated: true,
+    };
+  }
   if (originalBytes <= maxBytes) return { payload: value, originalBytes, truncated: false };
 
   for (const limit of [STRING_LIMIT, TIGHT_STRING_LIMIT]) {
     const clamped = clampValue(value, limit);
-    if (bytes(clamped) <= maxBytes) return { payload: clamped, originalBytes, truncated: true };
+    const size = bytes(clamped);
+    if (size !== null && size <= maxBytes) return { payload: clamped, originalBytes, truncated: true };
   }
 
   // Nothing about the message is small — thousands of short fields, say. Keep
   // the two labels the log renders from and say plainly what happened.
-  const record = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
   return {
     payload: {
-      type: record.type,
-      subtype: record.subtype,
+      ...labels,
       truncated: `This message was ${originalBytes} bytes and was not stored; the limit is ${maxBytes} (MAX_EVENT_BYTES).`,
     },
     originalBytes,

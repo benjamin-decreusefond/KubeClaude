@@ -110,6 +110,49 @@ test('a payload with nothing small in it still says what happened', () => {
   assert.match(stored.truncated, /MAX_EVENT_BYTES/);
 });
 
+test('a payload that cannot be serialised is recorded as such, not thrown', () => {
+  // Three ways JSON.stringify refuses, all of which used to escape clampPayload
+  // as an exception. appendEvent runs from a stream handler and is documented
+  // as never throwing, so nothing on that path may.
+  const cyclic: Record<string, unknown> = { type: 'assistant', subtype: 'text' };
+  cyclic.self = cyclic;
+
+  for (const [name, payload] of [
+    ['a cycle', cyclic],
+    ['a BigInt', { type: 'assistant', subtype: 'text', n: 1n }],
+    ['a toJSON that throws', { type: 'assistant', subtype: 'text', bad: { toJSON() { throw new Error('no'); } } }],
+  ] as const) {
+    const clamped = clampPayload(payload);
+    assert.equal(clamped.truncated, true, name);
+    const stored = clamped.payload as { type?: string; subtype?: string; truncated: string };
+    // The labels the log renders from survive, so the gap is visible in place
+    // rather than the line going missing from the middle of the output.
+    assert.equal(stored.type, 'assistant', name);
+    assert.equal(stored.subtype, 'text', name);
+    assert.match(stored.truncated, /could not be serialised/, name);
+    // And what comes back is itself storable, which is the whole point.
+    assert.doesNotThrow(() => JSON.stringify(clamped.payload), name);
+  }
+});
+
+test('an unserialisable event is stored rather than taking out the stream', () => {
+  const prompt = makePrompt();
+  const run = runStore.createRun({
+    promptId: prompt.id,
+    promptName: prompt.name,
+    triggerId: null,
+    triggerType: 'manual',
+    promptText: 'work',
+  });
+
+  const cyclic: Record<string, unknown> = { type: 'assistant' };
+  cyclic.self = cyclic;
+
+  const event = runStore.appendEvent(run.id, 'message', cyclic);
+  assert.ok(event, 'the event is recorded rather than lost');
+  assert.equal(runStore.listEvents(run.id).length, 1);
+});
+
 test('what is streamed to a watcher is what a reload will show', () => {
   const prompt = makePrompt();
   const run = runStore.createRun({
