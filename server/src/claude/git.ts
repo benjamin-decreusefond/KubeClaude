@@ -137,7 +137,33 @@ export async function prepareRepository(options: PrepareRepositoryOptions): Prom
   };
 
   await fsp.mkdir(dir, { recursive: true });
-  const fresh = !fs.existsSync(path.join(dir, '.git'));
+
+  /*
+   * Whether the checkout is usable, rather than whether a `.git` is sitting
+   * there. A clone the process was killed part-way through — a deploy landing
+   * mid-run, the git timeout firing — leaves one behind that is not yet a
+   * repository. Judged by its presence alone, every later run decides the
+   * checkout already exists and then fails on the first command that needs a
+   * real one, with nothing to repair it: the prompt stays broken until somebody
+   * deletes the directory by hand.
+   */
+  const hasGitDir = fs.existsSync(path.join(dir, '.git'));
+  const usable = hasGitDir && (await git(['rev-parse', '--git-dir'], dir, env)).ok;
+  const fresh = !usable;
+
+  if (hasGitDir && !usable) {
+    // Cleared rather than repaired: `clone` insists on an empty directory, and
+    // there is nothing here worth saving — the checkout is a scratch copy of
+    // the remote, and whatever mattered was pushed.
+    options.onEvent({
+      kind: 'repository',
+      step: 'discard',
+      ok: true,
+      message: 'the last clone did not finish; starting it again',
+    });
+    await fsp.rm(dir, { recursive: true, force: true });
+    await fsp.mkdir(dir, { recursive: true });
+  }
 
   if (fresh) {
     // Cloning into a directory that already holds files (a previous run's

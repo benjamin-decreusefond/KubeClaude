@@ -120,6 +120,26 @@ test('the first run clones and every run after it catches up', async () => {
   assert.equal(fs.readFileSync(path.join(dir, 'README.md'), 'utf8'), '# two\n');
 });
 
+test('a clone that never finished is started again, not inherited', async () => {
+  const dir = path.join(tmpDir, 'half-cloned');
+
+  // What a deploy landing mid-clone leaves behind: a .git that is not yet a
+  // repository, next to whatever had been checked out so far. Judged by its
+  // presence alone this looks like an existing checkout, and every run from
+  // here on fails on the first git command that needs a real one — with
+  // nothing to repair it, so the prompt stays broken until somebody deletes
+  // the directory by hand.
+  fs.mkdirSync(path.join(dir, '.git'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'partial.txt'), 'half a file\n');
+
+  const state = await prepareRepository({ url: remote, ref: 'main', dir, env, onEvent });
+
+  assert.equal(state.cloned, true, 'the wreckage is discarded and the clone starts over');
+  assert.equal(fs.readFileSync(path.join(dir, 'README.md'), 'utf8'), '# two\n');
+  assert.equal(fs.existsSync(path.join(dir, 'partial.txt')), false);
+  assert.equal(run('git', ['status', '--porcelain'], dir).trim(), '');
+});
+
 test('whatever the last run left behind, the next one starts clean', async () => {
   const dir = path.join(tmpDir, 'workspace');
 
