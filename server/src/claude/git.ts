@@ -166,6 +166,23 @@ export async function prepareRepository(options: PrepareRepositoryOptions): Prom
     }
   }
 
+  /*
+   * `reset --hard` only restores what git is tracking. A file the last run
+   * created and never committed survives it, and then survives every run after
+   * that — so the scratch copy quietly becomes a pile of whatever any run has
+   * ever left lying about. That is the failure this is all supposed to prevent:
+   * the next run's typecheck or test sweep picks up a stray source file that is
+   * in no commit and nobody can find in the repository.
+   *
+   * Ignored files are deliberately kept — no `-x`. `node_modules` and build
+   * caches are excluded from the repository on purpose and cost minutes to
+   * rebuild; they are not debris. (A nested checkout somebody cloned inside the
+   * workspace also stays, since removing that needs `-ff`, a bigger hammer than
+   * this warrants.)
+   */
+  const clean = await git(['clean', '-fd'], dir, env);
+  if (!clean.ok) fail('clean', clean);
+
   const head = await git(['rev-parse', 'HEAD'], dir, env);
   const state: RepositoryState = {
     cloned: fresh,

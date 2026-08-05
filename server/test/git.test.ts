@@ -128,11 +128,39 @@ test('whatever the last run left behind, the next one starts clean', async () =>
   fs.writeFileSync(path.join(dir, 'README.md'), 'half-finished edit\n');
   run('git', ['checkout', '-b', 'leftover'], dir);
 
+  // And the part `reset --hard` cannot undo, because git is not tracking it:
+  // whatever the run wrote and never committed. Left behind it outlives every
+  // run after this one, and the next typecheck or test sweep picks up a source
+  // file that is in no commit and nobody can find in the repository.
+  fs.writeFileSync(path.join(dir, 'scratch.ts'), 'export const leftover = 1\n');
+  fs.mkdirSync(path.join(dir, 'notes'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'notes/thinking.md'), 'half a thought\n');
+
   const state = await prepareRepository({ url: remote, ref: 'main', dir, env, onEvent });
 
   assert.equal(state.ref, 'main');
   assert.equal(fs.readFileSync(path.join(dir, 'README.md'), 'utf8'), '# two\n');
+  assert.equal(fs.existsSync(path.join(dir, 'scratch.ts')), false, 'an untracked file must not outlive the run');
+  assert.equal(fs.existsSync(path.join(dir, 'notes')), false, 'nor a directory of them');
   assert.equal(run('git', ['status', '--porcelain'], dir).trim(), '');
+});
+
+test('what the repository ignores on purpose is not treated as debris', async () => {
+  const dir = path.join(tmpDir, 'workspace');
+
+  // `node_modules` and build caches are kept out of the repository deliberately
+  // and cost minutes to rebuild. Cleaning is meant to remove what a run
+  // dropped, not to make every run reinstall its dependencies.
+  fs.mkdirSync(path.join(dir, 'node_modules/left-pad'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'node_modules/left-pad/index.js'), 'module.exports = 1\n');
+  fs.writeFileSync(path.join(dir, '.gitignore'), 'node_modules/\n');
+  run('git', ['add', '.gitignore'], dir);
+  run('git', ['-c', 'user.name=t', '-c', 'user.email=t@e', 'commit', '-m', 'ignore node_modules'], dir);
+  run('git', ['push', 'origin', 'HEAD:main'], dir);
+
+  await prepareRepository({ url: remote, ref: 'main', dir, env, onEvent });
+
+  assert.equal(fs.existsSync(path.join(dir, 'node_modules/left-pad/index.js')), true);
 });
 
 test('a ref that is not the default is honoured', async () => {
