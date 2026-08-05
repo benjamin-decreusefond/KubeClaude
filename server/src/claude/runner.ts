@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { StringDecoder } from 'node:string_decoder';
 import { claudeCredentials, config, forwardedEnvPrefixes } from '../config.js';
 import { describeCapabilities } from './environment.js';
 import { DEFAULT_GIT_IDENTITY, prepareRepository, writeGitConfig, type GitIdentity } from './git.js';
@@ -359,11 +360,23 @@ function readUsage(result: Record<string, unknown>): UsageTotals {
   };
 }
 
-/** Split a stream into complete lines, keeping the trailing partial line buffered. */
-function lineSplitter(onLine: (line: string) => void): (chunk: Buffer) => void {
+/**
+ * Split a stream into complete lines, keeping the trailing partial line buffered.
+ *
+ * Decoded through a `StringDecoder` rather than `chunk.toString('utf8')`. A
+ * chunk boundary falls wherever the pipe happens to break, which is regularly
+ * in the middle of a multi-byte character — and decoding each chunk on its own
+ * turns the halves into replacement characters. Nothing then reports it: the
+ * bytes are inside a JSON string, so the line still parses, and the corruption
+ * is stored and rendered as though the model had written it. `café` arriving as
+ * `caf<?><?>` is the whole failure. The decoder holds an incomplete sequence
+ * back until the rest of it turns up.
+ */
+export function lineSplitter(onLine: (line: string) => void): (chunk: Buffer) => void {
+  const decoder = new StringDecoder('utf8');
   let buffer = '';
   return (chunk: Buffer) => {
-    buffer += chunk.toString('utf8');
+    buffer += decoder.write(chunk);
     let index = buffer.indexOf('\n');
     while (index !== -1) {
       const line = buffer.slice(0, index).trim();
@@ -590,9 +603,12 @@ export async function runOneShot(options: OneShotOptions): Promise<string | null
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 
+  // Same reason as `lineSplitter`: a chunk can end mid-character, and this
+  // output is a judge's verdict that gets JSON-parsed.
+  const decoder = new StringDecoder('utf8');
   let out = '';
   child.stdout.on('data', (chunk: Buffer) => {
-    if (out.length < 16 * 1024) out += chunk.toString('utf8');
+    if (out.length < 16 * 1024) out += decoder.write(chunk);
   });
   child.stderr.resume();
   child.stdin.on('error', () => undefined);
@@ -639,9 +655,10 @@ export async function claudeVersion(): Promise<string | null> {
       return;
     }
 
+    const decoder = new StringDecoder('utf8');
     let out = '';
     child.stdout?.on('data', (chunk: Buffer) => {
-      if (out.length < 4096) out += chunk.toString('utf8');
+      if (out.length < 4096) out += decoder.write(chunk);
     });
     child.on('error', () => done(null));
     child.on('close', (code) => done(code === 0 ? out.trim() : null));
