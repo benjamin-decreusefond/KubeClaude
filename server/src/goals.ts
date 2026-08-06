@@ -69,15 +69,34 @@ const MAX_CONSECUTIVE_FAILURES = 3;
 const CONTEXT_ITERATIONS = 5;
 
 /**
+ * How the default loop defines an iteration, in one sentence, for the system
+ * prompt. A goal that writes its own instruction defines it differently, so
+ * repeating this at it would contradict the brief it just gave itself.
+ */
+const DEFAULT_UNIT_OF_WORK =
+  'An iteration is one landed change, carried all the way through and then handed over — not a ' +
+  'single step, and not everything you can think of.';
+
+/** What replaces it when the goal says for itself what an iteration is. */
+const OWN_UNIT_OF_WORK =
+  'What counts as one iteration is defined in the message you are given; work to that, and to ' +
+  'nothing more.';
+
+/**
  * Appended to the system prompt of every goal run. The report is how an
  * iteration hands its state to the next one, so it has to be unmissable and
  * mechanically parseable — a prose summary would need a model call to read.
+ *
+ * The shape of the report is fixed — `parseIterationReport` is what reads it,
+ * and a goal that reworded it would hand back something nothing could parse.
+ * What an iteration *is* is not fixed: that comes from the goal.
  */
-export function iterationReportInstruction(): string {
+export function iterationReportInstruction(goal?: Pick<Goal, 'iterationInstruction'>): string {
+  const unit = goal?.iterationInstruction?.trim() ? OWN_UNIT_OF_WORK : DEFAULT_UNIT_OF_WORK;
   return (
-    'You are working on a long-running goal, one iteration at a time. An iteration is one ' +
-    'landed change, carried all the way through and then handed over — not a single step, and ' +
-    'not everything you can think of. End every response with a report in exactly this shape, ' +
+    'You are working on a long-running goal, one iteration at a time. ' +
+    unit +
+    ' End every response with a report in exactly this shape, ' +
     'as the last thing you write:\n\n' +
     'PROGRESS: what you actually changed or learned this iteration, in two or three sentences.\n' +
     'DONE: the ids of the objectives you completed this iteration, comma separated, or none.\n' +
@@ -146,6 +165,59 @@ function budgetSection(quota: QuotaSlice | null | undefined, now: Date): string 
 const LOW_BUDGET_PCT = 25;
 
 /**
+ * How a goal iterates, when it does not say for itself.
+ *
+ * This used to be a string literal in the middle of `buildIterationPrompt`,
+ * which made "one landed change at a time" a property of KubeClaude rather than
+ * of the goal. It is a good default — it is what keeps a loop from emptying a
+ * token window in one sitting — but it is not the only sensible way to work:
+ * a goal that triages alerts, or sweeps a backlog, or reviews a repository, has
+ * its own unit of work. Any goal can now replace this text with its own, and
+ * `{{...}}` gets the same numbers this one uses.
+ */
+export const DEFAULT_ITERATION_INSTRUCTION =
+  'The unit of work is **one landed change**. Pick the most valuable thread, carry it all ' +
+  'the way through — found, fixed, tested, verified, merged, and deployed if this goal ' +
+  'deploys — and then stop. Do not start a second change, however small or obvious the next ' +
+  'one looks: starting another is what empties a token window in a single sitting, and this ' +
+  'loop is meant to last.\n\n' +
+  'That one change still has to be real. A single check, or a line confirming what the last ' +
+  'iteration already did, is not an iteration’s work — if that is all that was ' +
+  'outstanding, finish it and then carry one change through. Verify what you claim before ' +
+  'you claim it, and do not redo work an earlier iteration already finished. Waiting on ' +
+  'something external — a build, a check, a deployment — is not being blocked: wait for it ' +
+  'rather than handing over something half-landed, because {{cadence}}\n\n' +
+  'Whatever you did not get to goes in NEXT, and the same session picks it up next time.';
+
+/**
+ * What `{{name}}` may stand for in a goal's iteration instruction. Deliberately
+ * short: these are the things the text cannot know for itself but has to be
+ * able to say — the loop's own numbers. Anything unrecognised is left alone
+ * rather than blanked, so a stray brace in a brief survives intact.
+ */
+function iterationPlaceholders(goal: Goal): Record<string, string> {
+  const open = goal.objectives.filter((objective) => !objective.done);
+  return {
+    goal: goal.name,
+    iteration: String(goal.iteration + 1),
+    cadence: cadenceSentence(goal),
+    cadence_minutes: String(Math.max(0, goal.cadenceMinutes)),
+    open_objectives: String(open.length),
+  };
+}
+
+/**
+ * The goal's own iteration instruction with its placeholders filled in, or the
+ * default one when it has none. Blank is the same as none: an empty box in the
+ * editor means "use the default", not "say nothing about how to work".
+ */
+export function renderIterationInstruction(goal: Goal): string {
+  const template = goal.iterationInstruction?.trim() || DEFAULT_ITERATION_INSTRUCTION;
+  const values = iterationPlaceholders(goal);
+  return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (whole, name: string) => values[name] ?? whole);
+}
+
+/**
  * The message an iteration is started with. `quota` is the token window it will
  * be spending from; pass null when there is none to speak of.
  */
@@ -196,22 +268,7 @@ export function buildIterationPrompt(
     if (next) parts.push(`## What the last iteration said to do next\n${next}`);
   }
 
-  parts.push(
-    `## This iteration (#${goal.iteration + 1})\n` +
-      'The unit of work is **one landed change**. Pick the most valuable thread, carry it all ' +
-      'the way through — found, fixed, tested, verified, merged, and deployed if this goal ' +
-      'deploys — and then stop. Do not start a second change, however small or obvious the next ' +
-      'one looks: starting another is what empties a token window in a single sitting, and this ' +
-      'loop is meant to last.\n\n' +
-      'That one change still has to be real. A single check, or a line confirming what the last ' +
-      'iteration already did, is not an iteration’s work — if that is all that was ' +
-      'outstanding, finish it and then carry one change through. Verify what you claim before ' +
-      'you claim it, and do not redo work an earlier iteration already finished. Waiting on ' +
-      'something external — a build, a check, a deployment — is not being blocked: wait for it ' +
-      'rather than handing over something half-landed, because ' +
-      `${cadenceSentence(goal)}\n\n` +
-      'Whatever you did not get to goes in NEXT, and the same session picks it up next time.',
-  );
+  parts.push(`## This iteration (#${goal.iteration + 1})\n${renderIterationInstruction(goal)}`);
 
   const budget = budgetSection(quota, now);
   if (budget) parts.push(budget);
@@ -402,7 +459,7 @@ export function startIteration(goal: Goal, triggerType = 'goal'): Run | null {
   // so a goal made before this wording changed would keep the old one forever.
   // Nothing else may edit it — goals do not expose `appendSystemPrompt` — so
   // overwriting it here cannot clobber anybody's own text.
-  const instruction = iterationReportInstruction();
+  const instruction = iterationReportInstruction(goal);
   if (prompt.appendSystemPrompt !== instruction) {
     updatePrompt(prompt.id, { appendSystemPrompt: instruction });
   }

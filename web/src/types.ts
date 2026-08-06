@@ -87,6 +87,8 @@ export interface Goal {
   name: string;
   description: string;
   objectives: Objective[];
+  /** How this goal iterates, in its own words; null means the built-in brief. */
+  iterationInstruction: string | null;
   status: GoalStatus;
   cadenceMinutes: number;
   maxIterations: number;
@@ -127,6 +129,8 @@ export interface CreateGoalInput {
   objectives: string[];
   /** Create them all as standing missions rather than closable boxes. */
   continuousObjectives: boolean;
+  /** Null keeps the built-in brief every iteration is given. */
+  iterationInstruction: string | null;
   cadenceMinutes: number;
   maxIterations: number;
   stopWhenAchieved: boolean;
@@ -151,6 +155,7 @@ export interface UpdateGoalInput {
   objectives?: Objective[];
   addObjectives?: string[];
   addObjectivesContinuous?: boolean;
+  iterationInstruction?: string | null;
   status?: GoalStatus;
   cadenceMinutes?: number;
   maxIterations?: number;

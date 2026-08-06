@@ -467,6 +467,14 @@ export interface Goal {
   description: string;
   objectives: Objective[];
   status: GoalStatus;
+  /**
+   * How this goal iterates, in its own words: the brief every iteration is
+   * given under "This iteration". Null means the built-in one — "carry one
+   * landed change all the way through" — which suits most goals but not a goal
+   * that triages, sweeps or reviews. `{{cadence}}`, `{{iteration}}`, `{{goal}}`,
+   * `{{cadence_minutes}}` and `{{open_objectives}}` are filled in per run.
+   */
+  iterationInstruction: string | null;
   /** Minimum wait between the end of one iteration and the start of the next. */
   cadenceMinutes: number;
   /** Give up after this many iterations; 0 means keep going indefinitely. */

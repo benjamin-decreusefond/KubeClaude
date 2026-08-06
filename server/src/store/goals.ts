@@ -8,6 +8,7 @@ interface GoalRow {
   name: string;
   description: string;
   objectives: string;
+  iteration_instruction: string | null;
   status: string;
   cadence_minutes: number;
   max_iterations: number;
@@ -32,6 +33,7 @@ function toGoal(row: GoalRow): Goal {
       ...objective,
       continuous: Boolean(objective.continuous),
     })),
+    iterationInstruction: row.iteration_instruction,
     status: row.status as GoalStatus,
     cadenceMinutes: row.cadence_minutes,
     maxIterations: row.max_iterations,
@@ -69,6 +71,8 @@ export interface GoalInput {
   name: string;
   description: string;
   objectives: Objective[];
+  /** Null keeps the built-in brief; see `Goal.iterationInstruction`. */
+  iterationInstruction: string | null;
   status: GoalStatus;
   cadenceMinutes: number;
   maxIterations: number;
@@ -106,16 +110,17 @@ export function createGoal(input: GoalInput): Goal {
   const id = randomUUID();
   db.prepare(
     `INSERT INTO goals (
-       id, prompt_id, name, description, objectives, status, cadence_minutes, max_iterations,
-       iteration, stop_when_achieved, review_model, last_run_id, last_iteration_at,
-       created_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, NULL, NULL, ?, ?)`,
+       id, prompt_id, name, description, objectives, iteration_instruction, status,
+       cadence_minutes, max_iterations, iteration, stop_when_achieved, review_model,
+       last_run_id, last_iteration_at, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, NULL, NULL, ?, ?)`,
   ).run(
     id,
     input.promptId,
     input.name,
     input.description,
     JSON.stringify(input.objectives),
+    input.iterationInstruction,
     input.status,
     input.cadenceMinutes,
     input.maxIterations,
@@ -131,6 +136,7 @@ const COLUMN_BY_FIELD: Record<string, string> = {
   name: 'name',
   description: 'description',
   objectives: 'objectives',
+  iterationInstruction: 'iteration_instruction',
   status: 'status',
   cadenceMinutes: 'cadence_minutes',
   maxIterations: 'max_iterations',

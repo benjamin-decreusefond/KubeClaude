@@ -314,6 +314,12 @@ export const goalCreateSchema = goalPromptSchema.extend({
    * rather than a box any one iteration can tick.
    */
   continuousObjectives: z.boolean().default(false),
+  /**
+   * How this goal iterates, replacing the built-in brief. Null or blank keeps
+   * the default, so leaving the box empty is not the same as telling a goal
+   * nothing about how to work.
+   */
+  iterationInstruction: z.string().max(20_000).nullable().default(null),
   cadenceMinutes: z.number().int().min(0).max(100_000).default(30),
   maxIterations: z.number().int().min(0).max(10_000).default(0),
   stopWhenAchieved: z.boolean().default(true),
@@ -342,6 +348,8 @@ export const goalUpdateSchema = goalPromptSchema.partial().extend({
   addObjectives: z.array(z.string().max(2000)).max(100).optional(),
   /** Whether those extra objectives are standing ones. */
   addObjectivesContinuous: z.boolean().optional(),
+  /** Null or blank puts the goal back on the built-in brief. */
+  iterationInstruction: z.string().max(20_000).nullable().optional(),
   status: z.enum(['active', 'paused', 'achieved', 'abandoned']).optional(),
   cadenceMinutes: z.number().int().min(0).max(100_000).optional(),
   maxIterations: z.number().int().min(0).max(10_000).optional(),

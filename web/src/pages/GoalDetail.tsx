@@ -19,6 +19,7 @@ export function GoalDetail() {
   const now = useTicker(15_000);
   const { data: goal, refresh, error } = usePolled<GoalDetailType>(() => api.goal(id), 10_000, [id]);
   const { data: modelData } = usePolled<{ models: ModelOption[] }>(() => api.models(), 0);
+  const { data: template } = usePolled(() => api.iterationTemplate(), 0);
 
   const [newObjectives, setNewObjectives] = useState('');
   const [newStanding, setNewStanding] = useState(false);
@@ -367,6 +368,31 @@ export function GoalDetail() {
                 const description = event.target.value;
                 if (description !== goal.description) {
                   void act(() => api.updateGoal(goal.id, { description }));
+                }
+              }}
+            />
+          </Field>
+
+          {/* How it iterates, not just what it is after. The default suits a
+              goal that lands changes; one that triages or sweeps wants its own,
+              and this is where it says so. */}
+          <Field
+            label="How it iterates"
+            hint={
+              'The brief every iteration is given under “This iteration”. Empty falls back to the ' +
+              'built-in one, shown here in grey. ' +
+              (template ? `Placeholders: ${template.placeholders.map((name) => `{{${name}}}`).join(', ')}.` : '')
+            }
+          >
+            <textarea
+              key={goal.iterationInstruction ?? 'default'}
+              defaultValue={goal.iterationInstruction ?? ''}
+              placeholder={template?.instruction ?? ''}
+              style={{ minHeight: 120 }}
+              onBlur={(event) => {
+                const next = event.target.value.trim() || null;
+                if (next !== goal.iterationInstruction) {
+                  void act(() => api.updateGoal(goal.id, { iterationInstruction: next }));
                 }
               }}
             />

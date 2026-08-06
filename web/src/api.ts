@@ -202,6 +202,9 @@ export const api = {
     }),
 
   goals: () => request<Goal[]>('/api/goals'),
+  /** The built-in iteration brief, and what `{{...}}` may stand for in one. */
+  iterationTemplate: () =>
+    request<{ instruction: string; placeholders: string[] }>('/api/goals/iteration-template'),
   goal: (id: string) => request<GoalDetail>(`/api/goals/${id}`),
   createGoal: (input: Partial<CreateGoalInput>) =>
     request<GoalDetail>('/api/goals', { method: 'POST', body: JSON.stringify(input) }),
