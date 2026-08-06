@@ -321,6 +321,15 @@ comes round again. When a token budget is configured the iteration is also told 
 the window is left and when it resets. Whatever it did not get to goes in NEXT, and the
 same session picks it up next time.
 
+That brief is a default, not a rule. **How it iterates** on the goal — set it when you
+create one, or edit it later on the goal's page — replaces it with the goal's own
+definition of an iteration, for a goal that triages a queue, sweeps a backlog or reviews a
+repository rather than landing changes. Leave it empty and you get the text above. Inside
+it, `{{cadence}}`, `{{cadence_minutes}}`, `{{iteration}}`, `{{goal}}` and
+`{{open_objectives}}` are filled in from the loop's own numbers for that run, so a goal can
+quote the cost of stopping early the same way the default does. Only the *shape of the
+report* stays fixed — it is what KubeClaude parses to tick objectives off.
+
 For a hard ceiling rather than an instruction, set **Run token cap** in Settings — but it
 kills the run on the turn that crosses it, mid-change, which is why it is off by default.
 It ends with a report:
@@ -534,6 +543,7 @@ Restoring is deliberate — stop the pod, put the copy over `kubeclaude.db`, sta
 | `GET POST /api/goals`, `GET PATCH DELETE /api/goals/:id` | Goals and their objectives |
 | `POST /api/goals/:id/start`, `/pause`, `/iterate` | Resume the loop, hold it, run one iteration now |
 | `GET /api/goals/:id/iterations` | The progress log |
+| `GET /api/goals/iteration-template` | The built-in iteration brief and its placeholders, for editing a goal's own |
 | `GET /api/runs`, `/api/runs/:id`, `/api/runs/:id/events`, `/api/runs/:id/thread` | Runs. The list takes `promptId`, `status`, and `q` — free text matched against the prompt name, the instructions, the result and the error |
 | `POST /api/runs/:id/cancel`, `/resume`, `/follow-up` | Act on a run |
 | `GET POST /api/mcp-servers`, `PATCH DELETE /api/mcp-servers/:id` | MCP connections |

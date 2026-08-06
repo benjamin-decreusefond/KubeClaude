@@ -1,7 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { clearFailureStreak, iterationReportInstruction, isAchieved, startIteration } from '../goals.js';
+import {
+  DEFAULT_ITERATION_INSTRUCTION,
+  clearFailureStreak,
+  iterationReportInstruction,
+  isAchieved,
+  startIteration,
+} from '../goals.js';
 import { cancelRun, cancelRunsForPrompt } from '../queue.js';
 import * as goalStore from '../store/goals.js';
 import * as promptStore from '../store/prompts.js';
@@ -83,6 +89,18 @@ function promptPatchFrom(input: Record<string, unknown>): Partial<Prompt> {
 }
 
 export async function goalRoutes(app: FastifyInstance): Promise<void> {
+  /**
+   * The built-in iteration brief, so the editor can show what a goal that
+   * defines none is actually being told — and offer it as a starting point for
+   * one that wants to define its own.
+   */
+  app.get('/api/goals/iteration-template', async () => {
+    return {
+      instruction: DEFAULT_ITERATION_INSTRUCTION,
+      placeholders: ['goal', 'iteration', 'cadence', 'cadence_minutes', 'open_objectives'],
+    };
+  });
+
   app.get('/api/goals', async () => {
     return goalStore.listGoals().map((goal) => goalView(goal, promptStore.getPrompt(goal.promptId)));
   });
@@ -112,8 +130,11 @@ export async function goalRoutes(app: FastifyInstance): Promise<void> {
       permissionMode: input.permissionMode,
       allowedTools: input.allowedTools,
       disallowedTools: input.disallowedTools,
-      // How an iteration hands its state to the next one.
-      appendSystemPrompt: iterationReportInstruction(),
+      // How an iteration hands its state to the next one. What an iteration is
+      // comes from the goal, so the instruction has to know it already.
+      appendSystemPrompt: iterationReportInstruction({
+        iterationInstruction: input.iterationInstruction,
+      }),
       systemPrompt: input.systemPrompt,
       agentsJson: input.agentsJson,
       agentIds: input.agentIds,
@@ -145,6 +166,7 @@ export async function goalRoutes(app: FastifyInstance): Promise<void> {
       name: input.name,
       description: input.description,
       objectives: goalStore.makeObjectives(input.objectives, [], input.continuousObjectives),
+      iterationInstruction: input.iterationInstruction?.trim() || null,
       status: 'active',
       cadenceMinutes: input.cadenceMinutes,
       maxIterations: input.maxIterations,
@@ -199,6 +221,8 @@ export async function goalRoutes(app: FastifyInstance): Promise<void> {
       name: input.name,
       description: input.description,
       objectives,
+      iterationInstruction:
+        input.iterationInstruction === undefined ? undefined : input.iterationInstruction?.trim() || null,
       status: input.status,
       cadenceMinutes: input.cadenceMinutes,
       maxIterations: input.maxIterations,

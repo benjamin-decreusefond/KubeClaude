@@ -20,6 +20,7 @@ const { createPrompt, getPrompt, updatePrompt } = await import('../src/store/pro
 const goalStore = await import('../src/store/goals.js');
 const runStore = await import('../src/store/runs.js');
 const {
+  DEFAULT_ITERATION_INSTRUCTION,
   buildIterationPrompt,
   clearFailureStreak,
   iterationReportInstruction,
@@ -79,6 +80,7 @@ function makeGoal(overrides: Partial<Goal> = {}, objectives = ['Ship the thing',
     name: `Goal ${counter}`,
     description: 'Make the service reliable',
     objectives: goalStore.makeObjectives(objectives),
+    iterationInstruction: null,
     status: 'active',
     cadenceMinutes: 0,
     maxIterations: 0,
@@ -391,4 +393,62 @@ test('resuming a paused goal clears the streak that paused it, instead of re-pau
 
   // A goal with nothing to forgive gets no line in its log for the click.
   assert.equal(clearFailureStreak(goalStore.getGoal(goal.id)!), false);
+});
+
+test('a goal that defines its own way of iterating is told that, not the default', () => {
+  const { goal } = makeGoal({
+    iterationInstruction:
+      'Sweep every alert that came in since iteration {{iteration}}, triage each one, and stop ' +
+      'when the queue is empty — {{cadence}}',
+    cadenceMinutes: 15,
+  });
+
+  const text = buildIterationPrompt(goal, []);
+  assert.match(text, /Sweep every alert that came in since iteration 1/);
+  // The placeholders carry the loop's own numbers into the goal's own words.
+  assert.match(text, /next 15 minutes/);
+  // And the built-in brief is gone rather than stacked underneath it.
+  assert.doesNotMatch(text, /The unit of work is \*\*one landed change\*\*/);
+  // As is the sentence in the system prompt that would contradict it.
+  assert.match(iterationReportInstruction(goal), /defined in the message you are given/);
+  assert.doesNotMatch(iterationReportInstruction(goal), /An iteration is one landed change/);
+  // The report contract itself is not the goal's to rewrite: it is what
+  // parseIterationReport reads, and a goal that reworded it would hand back
+  // something nothing could parse.
+  assert.match(iterationReportInstruction(goal), /^PROGRESS:/m);
+  assert.match(iterationReportInstruction(goal), /^DONE:/m);
+});
+
+test('a goal with no instruction of its own gets the built-in brief', () => {
+  const { goal } = makeGoal({ cadenceMinutes: 30 });
+  assert.equal(goal.iterationInstruction, null);
+  const text = buildIterationPrompt(goal, []);
+  assert.match(text, /The unit of work is \*\*one landed change\*\*/);
+  assert.match(text, /next 30 minutes/);
+  assert.match(iterationReportInstruction(goal), /An iteration is one landed change/);
+  // Blank counts as none: an empty editor box means "use the default".
+  const blank = goalStore.updateGoal(goal.id, { iterationInstruction: '   ' })!;
+  assert.match(buildIterationPrompt(blank, []), /The unit of work is \*\*one landed change\*\*/);
+  // The default is the same text the editor is offered as a starting point.
+  assert.match(DEFAULT_ITERATION_INSTRUCTION, /one landed change/);
+});
+
+test('an unknown placeholder is left alone rather than blanked', () => {
+  const { goal } = makeGoal({ iterationInstruction: 'Work on {{whatever}} for {{goal}}.' });
+  const text = buildIterationPrompt(goal, []);
+  assert.match(text, /Work on \{\{whatever\}\} for Goal \d+\./);
+});
+
+test('changing how a goal iterates reaches the next iteration\u2019s system prompt', async () => {
+  process.env.FAKE_CLAUDE_RESULT = 'PROGRESS: A little.\nDONE: none\nNEXT: more';
+  const { goal, prompt } = makeGoal();
+
+  await sweepGoals(new Date());
+  await settle(prompt.id);
+  assert.equal(getPrompt(prompt.id)?.appendSystemPrompt, iterationReportInstruction());
+
+  const updated = goalStore.updateGoal(goal.id, { iterationInstruction: 'Review one file.' })!;
+  await sweepGoals(new Date());
+  assert.equal(getPrompt(prompt.id)?.appendSystemPrompt, iterationReportInstruction(updated));
+  await settle(prompt.id);
 });

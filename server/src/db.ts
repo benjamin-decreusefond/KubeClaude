@@ -416,6 +416,18 @@ const MIGRATIONS: Array<{ name: string; up: string }> = [
          AND finished_at IS NOT NULL;
     `,
   },
+  {
+    name: '012_goal_iteration_instruction',
+    up: `
+      /*
+       * How a goal iterates, in its own words. NULL — which is what every goal
+       * stored before this column existed has — means the built-in brief, so
+       * the default stays one place in the code rather than being copied into
+       * every row at migration time and then frozen there.
+       */
+      ALTER TABLE goals ADD COLUMN iteration_instruction TEXT;
+    `,
+  },
 ];
 
 export function migrate(): void {

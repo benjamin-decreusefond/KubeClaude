@@ -44,11 +44,13 @@ export function Goals() {
   const { data: goals, refresh, loading } = usePolled<Goal[]>(() => api.goals(), 15_000);
   const { data: modelData } = usePolled<{ models: ModelOption[] }>(() => api.models(), 0);
   const { data: mcpServers } = usePolled<McpServer[]>(() => api.mcpServers(), 0);
+  const { data: template } = usePolled(() => api.iterationTemplate(), 0);
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [objectives, setObjectives] = useState('');
   const [continuousObjectives, setContinuousObjectives] = useState(false);
+  const [iterationInstruction, setIterationInstruction] = useState('');
   const [model, setModel] = useState('');
   const [workingDir, setWorkingDir] = useState('');
   const [repoUrl, setRepoUrl] = useState('');
@@ -78,6 +80,7 @@ export function Goals() {
         description: description.trim(),
         objectives: objectives.split('\n').map((line) => line.replace(/^[-*\s[\]x]+/i, '').trim()),
         continuousObjectives,
+        iterationInstruction: iterationInstruction.trim() || null,
         cadenceMinutes,
         maxIterations,
         stopWhenAchieved,
@@ -153,6 +156,32 @@ export function Goals() {
               placeholder={'Every pod is running and ready\nNo PVC has been pending for over an hour\nRequests are within 20% of observed usage'}
               style={{ minHeight: 90 }}
             />
+          </Field>
+
+          <Field
+            label="How it iterates"
+            hint={
+              'What one iteration means for this goal. Empty uses the built-in brief — carry one ' +
+              'landed change all the way through — which is what most goals want. ' +
+              (template ? `Placeholders: ${template.placeholders.map((name) => `{{${name}}}`).join(', ')}.` : '')
+            }
+          >
+            <textarea
+              value={iterationInstruction}
+              onChange={(event) => setIterationInstruction(event.target.value)}
+              placeholder={template?.instruction ?? ''}
+              style={{ minHeight: 90 }}
+            />
+            {template && !iterationInstruction.trim() && (
+              <button
+                type="button"
+                className="ghost small"
+                style={{ marginTop: 8 }}
+                onClick={() => setIterationInstruction(template.instruction)}
+              >
+                Start from the default
+              </button>
+            )}
           </Field>
 
           <Checkbox
